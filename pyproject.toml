@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safe-rl-tradeoff"
+version = "0.1.0"
+description = "Safety-performance tradeoff environment setup for Safe RL robot experiments."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "safety-gymnasium==1.0.0",
+  "gymnasium==0.28.1",
+  "numpy>=1.23",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
