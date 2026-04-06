@@ -5,6 +5,7 @@ from spt_envs.logging import TrajectoryRecorderWrapper
 from spt_envs.splits import validate_layout_seed
 from spt_envs.wrappers import (
     FixedLayoutSeedWrapper,
+    RewardPenaltyWrapper,
     SafetyToGymWrapper,
     StandardizeSafetyInfoWrapper,
 )
@@ -17,6 +18,7 @@ def make_env(
     api=DEFAULT_API,
     render_mode=None,
     record_trajectory=False,
+    penalty_coeff=None,
 ):
     """Instantiate a local PointGoal environment with a stable project contract."""
     import safety_gymnasium
@@ -51,6 +53,9 @@ def make_env(
         split=split,
         layout_seed=layout_seed,
     )
+
+    if penalty_coeff is not None:
+        env = RewardPenaltyWrapper(env, penalty_coeff=penalty_coeff)
 
     if record_trajectory:
         env = TrajectoryRecorderWrapper(

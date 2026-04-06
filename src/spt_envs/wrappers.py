@@ -72,6 +72,40 @@ class StandardizeSafetyInfoWrapper(gymnasium.Wrapper):
         return observation, reward, cost, terminated, truncated, info
 
 
+class RewardPenaltyWrapper(gymnasium.Wrapper):
+    """Reward-penalty baseline: r_shaped = r - penalty_coeff * cost.
+
+    Operates on the safe (6-tuple) API.  The unpenalized reward is stored in
+    ``info["reward_unpenalized"]`` on every step so callers can distinguish
+    task performance from safety penalties.  At episode end, the cumulative
+    penalized return is reported as ``info["episode_penalized_return"]``.
+    """
+
+    def __init__(self, env, penalty_coeff):
+        if penalty_coeff < 0:
+            raise ValueError(
+                "penalty_coeff must be >= 0, got {!r}".format(penalty_coeff)
+            )
+        super().__init__(env)
+        self.penalty_coeff = float(penalty_coeff)
+        self._episode_penalized_return = 0.0
+
+    def reset(self, *, seed=None, options=None):
+        self._episode_penalized_return = 0.0
+        return self.env.reset(seed=seed, options=options)
+
+    def step(self, action):
+        observation, reward, cost, terminated, truncated, info = self.env.step(action)
+        info = dict(info)
+        shaped_reward = float(reward) - self.penalty_coeff * float(cost)
+        self._episode_penalized_return += shaped_reward
+        info["reward_unpenalized"] = float(reward)
+        info["penalty_coeff"] = self.penalty_coeff
+        if terminated or truncated:
+            info["episode_penalized_return"] = self._episode_penalized_return
+        return observation, shaped_reward, cost, terminated, truncated, info
+
+
 class SafetyToGymWrapper(gymnasium.Wrapper):
     """Convert a Safety-Gymnasium step API into a standard Gymnasium one."""
 

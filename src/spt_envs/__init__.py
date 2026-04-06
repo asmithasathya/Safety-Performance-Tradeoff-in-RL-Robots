@@ -2,9 +2,11 @@
 
 from spt_envs.configs import DEFAULT_MAX_EPISODE_STEPS, VARIANT_SPECS
 from spt_envs.splits import SPLIT_MANIFESTS, get_layout_seeds, validate_layout_seed
+from spt_envs.wrappers import RewardPenaltyWrapper
 
 __all__ = [
     "DEFAULT_MAX_EPISODE_STEPS",
+    "RewardPenaltyWrapper",
     "SPLIT_MANIFESTS",
     "VARIANT_SPECS",
     "get_layout_seeds",
