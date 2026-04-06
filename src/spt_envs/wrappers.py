@@ -106,6 +106,68 @@ class RewardPenaltyWrapper(gymnasium.Wrapper):
         return observation, shaped_reward, cost, terminated, truncated, info
 
 
+class LagrangianWrapper(gymnasium.Wrapper):
+    """Lagrangian constrained RL baseline.
+
+    Maintains a dual variable λ ≥ 0 that is updated at the end of every
+    episode via a dual gradient ascent step:
+
+        λ ← max(0, λ + lr_lambda * (episode_cost − budget))
+
+    During each rollout the reward is shaped with the *current* λ:
+
+        r_shaped = r − λ * cost
+
+    This drives λ up when the cost budget is exceeded and down when the policy
+    is safely under budget, automatically finding the Lagrange multiplier that
+    enforces the constraint at the boundary.
+
+    Operates on the safe (6-tuple) API.  Per-step info keys added:
+        ``reward_unpenalized``   – raw task reward before penalty
+        ``lagrangian_lambda``    – λ value used for this step
+        ``budget``               – the cost budget B
+
+    Episode-end info keys added:
+        ``episode_penalized_return`` – cumulative shaped return for this episode
+        ``lagrangian_lambda``        – λ *after* the dual update (updated value)
+    """
+
+    def __init__(self, env, budget, lr_lambda, init_lambda=0.0):
+        if budget < 0:
+            raise ValueError("budget must be >= 0, got {!r}".format(budget))
+        if lr_lambda <= 0:
+            raise ValueError("lr_lambda must be > 0, got {!r}".format(lr_lambda))
+        if init_lambda < 0:
+            raise ValueError("init_lambda must be >= 0, got {!r}".format(init_lambda))
+        super().__init__(env)
+        self.budget = float(budget)
+        self.lr_lambda = float(lr_lambda)
+        self.lambda_ = float(init_lambda)
+        self._episode_penalized_return = 0.0
+
+    def reset(self, *, seed=None, options=None):
+        self._episode_penalized_return = 0.0
+        return self.env.reset(seed=seed, options=options)
+
+    def step(self, action):
+        observation, reward, cost, terminated, truncated, info = self.env.step(action)
+        info = dict(info)
+        shaped_reward = float(reward) - self.lambda_ * float(cost)
+        self._episode_penalized_return += shaped_reward
+        info["reward_unpenalized"] = float(reward)
+        info["lagrangian_lambda"] = self.lambda_
+        info["budget"] = self.budget
+        if terminated or truncated:
+            info["episode_penalized_return"] = self._episode_penalized_return
+            episode_cost = info.get("episode_cost", 0.0)
+            self.lambda_ = max(
+                0.0, self.lambda_ + self.lr_lambda * (episode_cost - self.budget)
+            )
+            # Overwrite with the post-update value so callers see the new λ.
+            info["lagrangian_lambda"] = self.lambda_
+        return observation, shaped_reward, cost, terminated, truncated, info
+
+
 class SafetyToGymWrapper(gymnasium.Wrapper):
     """Convert a Safety-Gymnasium step API into a standard Gymnasium one."""
 

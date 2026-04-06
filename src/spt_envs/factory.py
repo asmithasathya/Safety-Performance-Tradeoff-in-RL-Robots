@@ -5,6 +5,7 @@ from spt_envs.logging import TrajectoryRecorderWrapper
 from spt_envs.splits import validate_layout_seed
 from spt_envs.wrappers import (
     FixedLayoutSeedWrapper,
+    LagrangianWrapper,
     RewardPenaltyWrapper,
     SafetyToGymWrapper,
     StandardizeSafetyInfoWrapper,
@@ -19,6 +20,9 @@ def make_env(
     render_mode=None,
     record_trajectory=False,
     penalty_coeff=None,
+    lagrangian_budget=None,
+    lagrangian_lr=None,
+    lagrangian_init_lambda=0.0,
 ):
     """Instantiate a local PointGoal environment with a stable project contract."""
     import safety_gymnasium
@@ -54,8 +58,26 @@ def make_env(
         layout_seed=layout_seed,
     )
 
+    if penalty_coeff is not None and lagrangian_budget is not None:
+        raise ValueError(
+            "penalty_coeff and lagrangian_budget are mutually exclusive; "
+            "choose one baseline at a time."
+        )
+
     if penalty_coeff is not None:
         env = RewardPenaltyWrapper(env, penalty_coeff=penalty_coeff)
+
+    if lagrangian_budget is not None:
+        if lagrangian_lr is None:
+            raise ValueError(
+                "lagrangian_lr is required when lagrangian_budget is set."
+            )
+        env = LagrangianWrapper(
+            env,
+            budget=lagrangian_budget,
+            lr_lambda=lagrangian_lr,
+            init_lambda=lagrangian_init_lambda,
+        )
 
     if record_trajectory:
         env = TrajectoryRecorderWrapper(
