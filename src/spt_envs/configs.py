@@ -1,6 +1,6 @@
 """Shared configuration for project-local Safety-Gymnasium environments."""
 
-DEFAULT_MAX_EPISODE_STEPS = 300
+DEFAULT_MAX_EPISODE_STEPS = 1000
 DEFAULT_AGENT_NAME = "Point"
 DEFAULT_API = "gym"
 VALID_APIS = ("safe", "gym")

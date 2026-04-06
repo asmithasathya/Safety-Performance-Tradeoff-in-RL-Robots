@@ -1,6 +1,6 @@
 # Safety-Performance-Tradeoff-in-RL-Robots
 
-This repository studies the true performance cost of different safety levels in robot learning. Instead of training one "safe agent" and stopping there, the project is designed to train policies across safety budgets `B ∈ {0, 1, 2, 5, 10}`, trace the full return-versus-violation frontier, and recommend an operating point.
+This repository studies the true performance cost of different safety levels in robot learning. Instead of training one "safe agent" and stopping there, the project is designed to train policies across safety budgets `B ∈ {0, 5, 10, 20, 35}`, trace the full return-versus-violation frontier, and recommend an operating point.
 
 The current milestone is environment setup only. No baselines, budget sweeps, Pareto plotting, or ablation code has been implemented yet.
 
@@ -38,7 +38,7 @@ Deferred for later:
 - Lagrangian constrained RL baseline
 - rule-based shielding baseline
 - RLHF-style baseline
-- budget sweeps over `B ∈ {0, 1, 2, 5, 10}`
+- budget sweeps over `B ∈ {0, 5, 10, 20, 35}`
 - Pareto frontier plotting
 - ablation studies
 
@@ -50,7 +50,7 @@ All variants use:
 - continuing PointGoal episodes
 - `continue_goal=True`
 - `constrain_indicator=True`
-- 300-step episode horizon
+- 1000-step episode horizon
 - hazard-only safety semantics
 - the same reward mechanics and observation/action spaces
 
@@ -72,6 +72,7 @@ The project uses the benchmark reward unchanged and defines safety in terms of c
 - This `episode_cost` is the quantity compared against budget `B`.
 - Because `constrain_indicator=True`, each unsafe step contributes a binary cost signal before episode aggregation.
 - `goals_achieved` is the success-style metric for this continuing task family.
+- With the 1000-step horizon in this repo, the recommended starting budget sweep is `B ∈ {0, 5, 10, 20, 35}`.
 
 This means later constrained-RL methods can treat `B` as an episode-level cost budget while still evaluating return and task progress in a benchmark-like navigation setting.
 
