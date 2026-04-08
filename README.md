@@ -1,48 +1,17 @@
 # Safety-Performance-Tradeoff-in-RL-Robots
 
-This repository studies the true performance cost of different safety levels in robot learning. Instead of training one "safe agent" and stopping there, the project is designed to train policies across safety budgets `B ∈ {0, 5, 10, 20, 35}`, trace the full return-versus-violation frontier, and recommend an operating point.
+This repository studies the true performance cost of different safety levels in robot learning. The current repo now supports:
 
-The current milestone is environment setup only. No baselines, budget sweeps, Pareto plotting, or ablation code has been implemented yet.
+- local Safety-Gymnasium PointGoal variants (`easy`, `medium`, `hard`)
+- a hand-tuned reward-penalty baseline
+- a Lagrangian constrained RL baseline with learned `lambda`
+- PPO training, checkpointing, and machine-readable training logs
+- manual evaluation on held-out layouts
+- post-processing to match reward-penalty runs to target budgets
 
-## Why Safety-Gymnasium
+The project target budgets are `B ∈ {0, 5, 10, 20, 35}`.
 
-The environment layer is built on top of Safety-Gymnasium because it gives the project:
-
-- benchmark-recognizable safe-RL tasks
-- native cost-aware step outputs
-- CPU-friendly local experimentation
-- a clear path to constrained RL, reward-penalty, shielding, and later RLHF-style comparisons
-
-This repo does not use raw official `Goal0/1/2` unchanged.
-
-- `Goal0` has no safety cost, which weakens the "different safety levels" story.
-- `Goal2` mixes hazard and vase costs, which makes budget semantics less consistent across variants.
-
-Instead, this repo registers three local hazard-only PointGoal variants that keep the same task family and reward mechanics while making the safety signal consistent across difficulty levels.
-
-## Current Milestone
-
-Implemented now:
-
-- Conda-first project setup
-- three local PointGoal variants: `easy`, `medium`, `hard`
-- reproducible `train` and `test` layout split manifests
-- a stable environment factory with safe and gym-style APIs
-- episode-level logging of return, cumulative cost, goals achieved, and episode length
-- optional in-memory trajectory recording
-- smoke-check script and tests
-
-Deferred for later:
-
-- reward-penalty baseline
-- Lagrangian constrained RL baseline
-- rule-based shielding baseline
-- RLHF-style baseline
-- budget sweeps over `B ∈ {0, 5, 10, 20, 35}`
-- Pareto frontier plotting
-- ablation studies
-
-## Environment Definitions
+## Environment
 
 All variants use:
 
@@ -58,141 +27,245 @@ Difficulty differs only by hazard count:
 
 | Variant | Env ID | Hazards | Train Layout Seeds | Test Layout Seeds |
 | --- | --- | ---: | ---: | ---: |
-| easy | `SPTPointGoalEasy-v0` | 4 | 24 | 8 |
-| medium | `SPTPointGoalMedium-v0` | 8 | 24 | 8 |
-| hard | `SPTPointGoalHard-v0` | 12 | 24 | 8 |
+| easy | `SPTPointGoalEasy-v0` | 4 | 32 | 8 |
+| medium | `SPTPointGoalMedium-v0` | 8 | 32 | 8 |
+| hard | `SPTPointGoalHard-v0` | 12 | 32 | 8 |
 
-The split manifests are explicit and checked into the repo in [src/spt_envs/splits.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/splits.py).
+Train and test splits are explicit in `src/spt_envs/splits.py`.
 
-## Reward, Cost, and Budget Semantics
+## Reward, Cost, and Budgets
 
-The project uses the benchmark reward unchanged and defines safety in terms of cumulative episode cost.
+The environment uses the benchmark reward unchanged.
 
-- `episode_cost` is the sum of per-step costs over one episode.
-- This `episode_cost` is the quantity compared against budget `B`.
-- Because `constrain_indicator=True`, each unsafe step contributes a binary cost signal before episode aggregation.
-- `goals_achieved` is the success-style metric for this continuing task family.
-- With the 1000-step horizon in this repo, the recommended starting budget sweep is `B ∈ {0, 5, 10, 20, 35}`.
+- `episode_return`: raw task return over one full episode
+- `episode_cost`: cumulative unsafe timesteps over one episode
+- `goals_achieved`: number of goals completed during the episode
+- `episode_length`: number of steps in the episode
 
-This means later constrained-RL methods can treat `B` as an episode-level cost budget while still evaluating return and task progress in a benchmark-like navigation setting.
+The budget `B` constrains `episode_cost`.
 
-## Public Interface
+Because `constrain_indicator=True`, each unsafe step contributes binary cost before aggregation. In this repo, a budget such as `B = 10` means the policy is trying to stay under about 10 unsafe timesteps per 1000-step episode.
 
-The main entry point is `make_env(...)` in [src/spt_envs/factory.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/factory.py).
+## Baselines
+
+### Reward-Penalty
+
+Reward-penalty uses a fixed hand-tuned coefficient:
+
+`r_shaped = r - lambda * cost`
+
+- `lambda` is the fixed `penalty_coeff`
+- there is no direct budget argument during training
+- to compare against target budgets `{0, 5, 10, 20, 35}`, train a sweep over penalty coefficients and later match runs by realized `episode_cost`
+
+Recommended starting coefficient sweep:
+
+`lambda ∈ {0.0, 0.1, 0.3, 1.0, 3.0, 10.0, 30.0}`
+
+### Lagrangian
+
+Lagrangian training uses a learned dual variable:
+
+`r_shaped = r - lambda * cost`
+
+At the end of each episode:
+
+`lambda <- max(0, lambda + lr * (episode_cost - B))`
+
+That means:
+
+- if `episode_cost > B`, `lambda` increases and the next episode penalizes unsafe behavior more heavily
+- if `episode_cost < B`, `lambda` decreases and the policy can care more about task reward
+- if `episode_cost ≈ B`, `lambda` stabilizes near the level that balances reward and safety
+
+Unlike reward-penalty, Lagrangian training takes the target budget `B` directly.
+
+## Public Interfaces
+
+For fixed-layout envs and evaluation:
 
 ```python
 from spt_envs.factory import make_env
 
 env = make_env(
     variant="medium",
-    split="train",
-    layout_seed=0,
+    split="test",
+    layout_seed=100,
     api="gym",
-    render_mode=None,
-    record_trajectory=False,
 )
 ```
 
-Arguments:
+For training across the full train split:
 
-- `variant`: one of `easy`, `medium`, `hard`
-- `split`: one of `train`, `test`
-- `layout_seed`: must belong to that variant's split manifest
-- `api="safe"` returns `(obs, reward, cost, terminated, truncated, info)`
-- `api="gym"` returns `(obs, reward, terminated, truncated, info)` with `info["cost"]`
+```python
+from spt_envs.factory import make_train_env
 
-Standardized `info` fields:
+env = make_train_env(
+    variant="medium",
+    seed=0,
+    api="gym",
+    penalty_coeff=1.0,
+)
+```
 
-- per step: `cost`, `goal_achieved`, `variant`, `split`, `layout_seed`
-- end of episode: `episode_return`, `episode_cost`, `goals_achieved`, `episode_length`
+`make_train_env(...)` samples one approved `train` layout seed on each reset and preserves the sampled `layout_seed` in `info`.
 
 ## Install
 
 CPU-only setup is supported.
 
-Recommended setup:
+Create and activate the Conda environment:
 
 ```bash
 conda env create -f environment.yml
 conda activate safe-rl-tradeoff
-pip install -e .
 ```
 
-Manual fallback:
+Install the package plus training and test dependencies:
 
 ```bash
-conda create -n safe-rl-tradeoff python=3.10 -y
-conda activate safe-rl-tradeoff
-pip install -e .
+pip install -e ".[train,dev]"
 ```
 
-Install test dependencies as well:
+## Environment Smoke Check
 
-```bash
-pip install -e ".[dev]"
-```
-
-## Verification
-
-Run the environment smoke check:
+Run a quick non-training environment check:
 
 ```bash
 python scripts/check_env.py --variant medium --split train --layout-seed 0 --episodes 2
 ```
 
-Run the test suite:
-
-```bash
-pytest -q
-```
-
-The smoke-check script prints:
-
-- env ID
-- observation space
-- action space
-- episode return
-- episode cost
-- goals achieved
-- episode length
-
-## Optional Render
-
-You can inspect one rollout with rendering:
+Optional render:
 
 ```bash
 python scripts/check_env.py --variant easy --split train --layout-seed 0 --episodes 1 --render human
 ```
 
-If you want to record trajectories in memory for later analysis:
+## Training
+
+Training saves checkpoints and logs, but it does not automatically run evaluation.
+
+Each training run writes:
+
+- `run_config.json`
+- `train_metrics.csv`
+- `evaluation_manifest.json`
+- `checkpoints/`
+- `final_model.zip`
+- `final_model.json`
+
+### Reward-Penalty Example
 
 ```bash
-python scripts/check_env.py --variant easy --split train --layout-seed 0 --episodes 1 --record-trajectory
+python scripts/train_baseline.py \
+  --baseline reward_penalty \
+  --variant medium \
+  --seed 0 \
+  --total-timesteps 1000000 \
+  --save-freq 50000 \
+  --penalty-coeff 1.0 \
+  --output-dir results/reward_penalty/medium/seed0_lambda1p0
 ```
+
+### Lagrangian Example
+
+```bash
+python scripts/train_baseline.py \
+  --baseline lagrangian \
+  --variant medium \
+  --seed 0 \
+  --total-timesteps 1000000 \
+  --save-freq 50000 \
+  --budget 10 \
+  --lagrangian-lr 0.05 \
+  --output-dir results/lagrangian/medium/seed0_budget10
+```
+
+### Metrics Logged During Training
+
+`train_metrics.csv` records:
+
+- `episode_return`
+- `episode_penalized_return`
+- `episode_cost`
+- `goals_achieved`
+- `episode_length`
+- training timestep
+- elapsed time
+- steps per second
+- baseline name
+- variant
+- run seed
+- sampled `layout_seed`
+- reward-penalty `penalty_coeff`
+- Lagrangian `budget`
+- Lagrangian `lambda` values
+
+This gives you enough information to analyze learning speed later without running evaluation first.
+
+## Evaluation
+
+Evaluation is set up as a separate manual step and is not triggered during training.
+
+To evaluate a checkpoint on all held-out test layouts:
+
+```bash
+python scripts/evaluate_baseline.py \
+  --run-dir results/lagrangian/medium/seed0_budget10 \
+  --checkpoint final_model.zip \
+  --split test
+```
+
+To evaluate on the train split instead:
+
+```bash
+python scripts/evaluate_baseline.py \
+  --run-dir results/reward_penalty/medium/seed0_lambda1p0 \
+  --checkpoint final_model.zip \
+  --split train
+```
+
+Each evaluation run writes:
+
+- `eval_episodes.csv`
+- `eval_summary.csv`
+
+By default these go under:
+
+`<run-dir>/evaluations/<checkpoint-name-without-zip>/<split>/`
+
+## Aggregation
+
+Reward-penalty runs must be matched to budgets after evaluation. Lagrangian runs already carry their target budget.
+
+Once you have evaluation summaries, aggregate them with:
+
+```bash
+python scripts/aggregate_budget_results.py \
+  --results-root results \
+  --split train \
+  --output-dir results/aggregated/train
+```
+
+This writes:
+
+- `reward_penalty_budget_matches.csv`
+- `lagrangian_budget_summary.csv`
+
+Use train-split aggregation to match reward-penalty coefficient sweeps to target budgets `{0, 5, 10, 20, 35}`. After that, run the corresponding held-out test evaluations for robustness reporting.
 
 ## Repo Layout
 
-- [environment.yml](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/environment.yml): Conda environment definition
-- [pyproject.toml](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/pyproject.toml): packaging and dependencies
-- [src/spt_envs/registry.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/registry.py): local task definitions and env registration
-- [src/spt_envs/factory.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/factory.py): main env factory
-- [src/spt_envs/wrappers.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/wrappers.py): standardized metadata, cost, and API wrappers
-- [src/spt_envs/logging.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/logging.py): optional trajectory capture
-- [scripts/check_env.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/scripts/check_env.py): smoke-check utility
-- [tests/test_env_creation.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/tests/test_env_creation.py): creation smoke tests
+- `src/spt_envs/`: environment definitions, wrappers, and factories
+- `src/spt_training/`: training, evaluation, and aggregation utilities
+- `scripts/train_baseline.py`: train one baseline run
+- `scripts/evaluate_baseline.py`: evaluate one checkpoint on a split
+- `scripts/aggregate_budget_results.py`: budget-oriented result aggregation
+- `tests/`: env, baseline, training, evaluation, and aggregation tests
 
 ## Troubleshooting
 
-- If `import safety_gymnasium` or MuJoCo setup fails, recreate the Conda environment and reinstall the package inside that environment.
-- If rendering fails, first verify the non-rendered smoke check without `--render`.
-- If a layout seed is rejected, make sure it belongs to the chosen variant and split manifest in [src/spt_envs/splits.py](/Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots/src/spt_envs/splits.py).
-- If `pytest` fails before dependencies are installed, run `pip install -e ".[dev]"` inside the Conda environment.
-
-## Notes for Later Milestones
-
-This setup is intentionally baseline-agnostic.
-
-- The safe API supports constrained RL methods directly.
-- The gym-style adapter supports standard RL code that expects Gymnasium step signatures.
-- The explicit split manifests support held-out layout robustness evaluation later.
-- The trajectory recorder gives a starting point for future RLHF-style preference or demonstration data collection.
+- If `safety_gymnasium` or MuJoCo fails to import, recreate the Conda env and reinstall with `pip install -e ".[train,dev]"`.
+- If `stable_baselines3` or `torch` is missing, the training and evaluation scripts will fail until the `train` extra is installed.
+- If a layout seed is rejected in fixed-layout evaluation, check `src/spt_envs/splits.py`.
+- If `output-dir` already exists and contains files, the training runner will refuse to overwrite it.
