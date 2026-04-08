@@ -1,0 +1,200 @@
+"""Evaluation utilities for trained PPO baseline checkpoints."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from pathlib import Path
+
+import numpy as np
+
+from spt_envs.factory import make_env
+from spt_envs.splits import get_layout_seeds
+from spt_training.common import ensure_directory, read_json
+
+
+EVAL_EPISODE_FIELDNAMES = (
+    "baseline",
+    "variant",
+    "run_seed",
+    "split",
+    "layout_seed",
+    "checkpoint_name",
+    "checkpoint_timesteps",
+    "episode_index",
+    "episode_return",
+    "episode_cost",
+    "goals_achieved",
+    "episode_length",
+    "penalty_coeff",
+    "budget",
+    "lagrangian_lambda",
+)
+
+EVAL_SUMMARY_FIELDNAMES = (
+    "baseline",
+    "variant",
+    "run_seed",
+    "split",
+    "checkpoint_name",
+    "checkpoint_timesteps",
+    "episodes",
+    "deterministic",
+    "penalty_coeff",
+    "budget",
+    "lagrangian_lambda",
+    "mean_episode_return",
+    "std_episode_return",
+    "mean_episode_cost",
+    "std_episode_cost",
+    "mean_goals_achieved",
+    "std_goals_achieved",
+    "mean_episode_length",
+    "std_episode_length",
+)
+
+
+def build_evaluate_parser():
+    """Build the CLI parser used by the evaluation script."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--run-dir", required=True)
+    parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--split", choices=("train", "test"), required=True)
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--episodes-per-seed", type=int, default=1)
+    parser.add_argument(
+        "--stochastic",
+        action="store_true",
+        help="Sample actions stochastically instead of deterministic PPO inference.",
+    )
+    return parser
+
+
+def _resolve_run_artifacts(run_dir, checkpoint_name):
+    run_dir = Path(run_dir)
+    checkpoint_path = Path(checkpoint_name)
+    if not checkpoint_path.is_absolute():
+        checkpoint_path = run_dir / checkpoint_path
+    if not checkpoint_path.exists():
+        raise FileNotFoundError(
+            "Checkpoint {!r} does not exist.".format(str(checkpoint_path))
+        )
+    metadata_path = checkpoint_path.with_suffix(".json")
+    metadata = read_json(metadata_path) if metadata_path.exists() else {}
+    return run_dir, checkpoint_path, metadata
+
+
+def _write_csv(path, fieldnames, rows):
+    with Path(path).open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow(row)
+
+
+def evaluate_run(
+    run_dir,
+    checkpoint_name,
+    split,
+    output_dir=None,
+    episodes_per_seed=1,
+    deterministic=True,
+):
+    """Evaluate one checkpoint across every layout seed for a chosen split."""
+    try:
+        from stable_baselines3 import PPO
+    except ImportError as exc:  # pragma: no cover - import path only exercised locally
+        raise ImportError(
+            "Evaluation requires the 'train' dependencies. "
+            "Install them with: pip install -e \".[train,dev]\""
+        ) from exc
+
+    run_dir, checkpoint_path, checkpoint_metadata = _resolve_run_artifacts(
+        run_dir, checkpoint_name
+    )
+    run_config = read_json(run_dir / "run_config.json")
+
+    if episodes_per_seed <= 0:
+        raise ValueError("episodes_per_seed must be > 0.")
+
+    if output_dir is None:
+        output_dir = run_dir / "evaluations" / checkpoint_path.stem / split
+    output_dir = ensure_directory(output_dir)
+
+    model = PPO.load(str(checkpoint_path), device="auto")
+    rows = []
+    seeds = get_layout_seeds(run_config["variant"], split)
+
+    for layout_seed in seeds:
+        for episode_index in range(int(episodes_per_seed)):
+            env = make_env(
+                variant=run_config["variant"],
+                split=split,
+                layout_seed=layout_seed,
+                api="gym",
+            )
+            observation, info = env.reset()
+            _ = info
+            done = False
+            while not done:
+                action, _ = model.predict(observation, deterministic=deterministic)
+                observation, reward, terminated, truncated, info = env.step(action)
+                _ = reward
+                done = bool(terminated or truncated)
+            env.close()
+
+            rows.append(
+                {
+                    "baseline": run_config["baseline"],
+                    "variant": run_config["variant"],
+                    "run_seed": int(run_config["seed"]),
+                    "split": split,
+                    "layout_seed": int(layout_seed),
+                    "checkpoint_name": checkpoint_path.name,
+                    "checkpoint_timesteps": checkpoint_metadata.get("timesteps"),
+                    "episode_index": int(episode_index),
+                    "episode_return": float(info["episode_return"]),
+                    "episode_cost": float(info["episode_cost"]),
+                    "goals_achieved": int(info.get("goals_achieved", 0)),
+                    "episode_length": int(info.get("episode_length", 0)),
+                    "penalty_coeff": checkpoint_metadata.get("penalty_coeff"),
+                    "budget": checkpoint_metadata.get("budget"),
+                    "lagrangian_lambda": checkpoint_metadata.get("lagrangian_lambda"),
+                }
+            )
+
+    eval_episodes_path = output_dir / "eval_episodes.csv"
+    _write_csv(eval_episodes_path, EVAL_EPISODE_FIELDNAMES, rows)
+
+    returns = np.array([row["episode_return"] for row in rows], dtype=float)
+    costs = np.array([row["episode_cost"] for row in rows], dtype=float)
+    goals = np.array([row["goals_achieved"] for row in rows], dtype=float)
+    lengths = np.array([row["episode_length"] for row in rows], dtype=float)
+    summary_row = {
+        "baseline": run_config["baseline"],
+        "variant": run_config["variant"],
+        "run_seed": int(run_config["seed"]),
+        "split": split,
+        "checkpoint_name": checkpoint_path.name,
+        "checkpoint_timesteps": checkpoint_metadata.get("timesteps"),
+        "episodes": int(len(rows)),
+        "deterministic": bool(deterministic),
+        "penalty_coeff": checkpoint_metadata.get("penalty_coeff"),
+        "budget": checkpoint_metadata.get("budget"),
+        "lagrangian_lambda": checkpoint_metadata.get("lagrangian_lambda"),
+        "mean_episode_return": float(returns.mean()),
+        "std_episode_return": float(returns.std(ddof=0)),
+        "mean_episode_cost": float(costs.mean()),
+        "std_episode_cost": float(costs.std(ddof=0)),
+        "mean_goals_achieved": float(goals.mean()),
+        "std_goals_achieved": float(goals.std(ddof=0)),
+        "mean_episode_length": float(lengths.mean()),
+        "std_episode_length": float(lengths.std(ddof=0)),
+    }
+
+    eval_summary_path = output_dir / "eval_summary.csv"
+    _write_csv(eval_summary_path, EVAL_SUMMARY_FIELDNAMES, [summary_row])
+    return {
+        "eval_episodes_csv": str(eval_episodes_path),
+        "eval_summary_csv": str(eval_summary_path),
+    }
