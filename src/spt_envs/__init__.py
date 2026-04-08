@@ -12,6 +12,7 @@ __all__ = [
     "VARIANT_SPECS",
     "get_layout_seeds",
     "make_env",
+    "make_train_env",
     "register_envs",
     "validate_layout_seed",
 ]
@@ -22,6 +23,10 @@ def __getattr__(name):
         from spt_envs.factory import make_env
 
         return make_env
+    if name == "make_train_env":
+        from spt_envs.factory import make_train_env
+
+        return make_train_env
     if name == "register_envs":
         from spt_envs.registry import register_envs
 

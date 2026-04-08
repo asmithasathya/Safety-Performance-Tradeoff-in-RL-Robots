@@ -2,7 +2,7 @@
 
 from spt_envs.configs import VALID_SPLITS, VARIANT_SPECS, get_variant_spec
 
-TRAIN_LAYOUT_SEEDS = tuple(range(24))
+TRAIN_LAYOUT_SEEDS = tuple(range(32))
 TEST_LAYOUT_SEEDS = tuple(range(100, 108))
 
 SPLIT_MANIFESTS = {

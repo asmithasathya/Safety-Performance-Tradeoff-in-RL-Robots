@@ -2,34 +2,18 @@
 
 from spt_envs.configs import DEFAULT_API, VALID_APIS, VALID_SPLITS, get_variant_spec
 from spt_envs.logging import TrajectoryRecorderWrapper
-from spt_envs.splits import validate_layout_seed
+from spt_envs.splits import get_layout_seeds, validate_layout_seed
 from spt_envs.wrappers import (
     FixedLayoutSeedWrapper,
     LagrangianWrapper,
     RewardPenaltyWrapper,
     SafetyToGymWrapper,
     StandardizeSafetyInfoWrapper,
+    TrainLayoutSeedWrapper,
 )
 
 
-def make_env(
-    variant,
-    split,
-    layout_seed,
-    api=DEFAULT_API,
-    render_mode=None,
-    record_trajectory=False,
-    penalty_coeff=None,
-    lagrangian_budget=None,
-    lagrangian_lr=None,
-    lagrangian_init_lambda=0.0,
-):
-    """Instantiate a local PointGoal environment with a stable project contract."""
-    import safety_gymnasium
-
-    from spt_envs.registry import get_env_id_for_variant, register_envs
-
-    get_variant_spec(variant)
+def _validate_api(split, api):
     if split not in VALID_SPLITS:
         raise ValueError(
             "Unknown split {!r}. Expected one of {}.".format(
@@ -45,19 +29,14 @@ def make_env(
             )
         )
 
-    layout_seed = validate_layout_seed(variant, split, layout_seed)
-    register_envs()
 
-    env_id = get_env_id_for_variant(variant)
-    env = safety_gymnasium.make(env_id, render_mode=render_mode)
-    env = FixedLayoutSeedWrapper(env, layout_seed=layout_seed)
-    env = StandardizeSafetyInfoWrapper(
-        env,
-        variant=variant,
-        split=split,
-        layout_seed=layout_seed,
-    )
-
+def _apply_baseline_wrappers(
+    env,
+    penalty_coeff=None,
+    lagrangian_budget=None,
+    lagrangian_lr=None,
+    lagrangian_init_lambda=0.0,
+):
     if penalty_coeff is not None and lagrangian_budget is not None:
         raise ValueError(
             "penalty_coeff and lagrangian_budget are mutually exclusive; "
@@ -78,6 +57,102 @@ def make_env(
             lr_lambda=lagrangian_lr,
             init_lambda=lagrangian_init_lambda,
         )
+
+    return env
+
+
+def make_env(
+    variant,
+    split,
+    layout_seed,
+    api=DEFAULT_API,
+    render_mode=None,
+    record_trajectory=False,
+    penalty_coeff=None,
+    lagrangian_budget=None,
+    lagrangian_lr=None,
+    lagrangian_init_lambda=0.0,
+):
+    """Instantiate a local PointGoal environment with a stable project contract."""
+    import safety_gymnasium
+
+    from spt_envs.registry import get_env_id_for_variant, register_envs
+
+    get_variant_spec(variant)
+    _validate_api(split, api)
+
+    layout_seed = validate_layout_seed(variant, split, layout_seed)
+    register_envs()
+
+    env_id = get_env_id_for_variant(variant)
+    env = safety_gymnasium.make(env_id, render_mode=render_mode)
+    env = FixedLayoutSeedWrapper(env, layout_seed=layout_seed)
+    env = StandardizeSafetyInfoWrapper(
+        env,
+        variant=variant,
+        split=split,
+        layout_seed=layout_seed,
+    )
+    env = _apply_baseline_wrappers(
+        env,
+        penalty_coeff=penalty_coeff,
+        lagrangian_budget=lagrangian_budget,
+        lagrangian_lr=lagrangian_lr,
+        lagrangian_init_lambda=lagrangian_init_lambda,
+    )
+
+    if record_trajectory:
+        env = TrajectoryRecorderWrapper(
+            env,
+            capture_frames=render_mode in ("rgb_array", "rgb_array_list"),
+        )
+
+    if api == "safe":
+        return env
+
+    return SafetyToGymWrapper(env)
+
+
+def make_train_env(
+    variant,
+    seed,
+    api=DEFAULT_API,
+    render_mode=None,
+    record_trajectory=False,
+    penalty_coeff=None,
+    lagrangian_budget=None,
+    lagrangian_lr=None,
+    lagrangian_init_lambda=0.0,
+):
+    """Instantiate a training env that samples a train layout seed on each reset."""
+    import safety_gymnasium
+
+    from spt_envs.registry import get_env_id_for_variant, register_envs
+
+    get_variant_spec(variant)
+    _validate_api("train", api)
+    register_envs()
+
+    env_id = get_env_id_for_variant(variant)
+    env = safety_gymnasium.make(env_id, render_mode=render_mode)
+    env = TrainLayoutSeedWrapper(
+        env,
+        layout_seeds=get_layout_seeds(variant, "train"),
+        rng_seed=seed,
+    )
+    env = StandardizeSafetyInfoWrapper(
+        env,
+        variant=variant,
+        split="train",
+        layout_seed=None,
+    )
+    env = _apply_baseline_wrappers(
+        env,
+        penalty_coeff=penalty_coeff,
+        lagrangian_budget=lagrangian_budget,
+        lagrangian_lr=lagrangian_lr,
+        lagrangian_init_lambda=lagrangian_init_lambda,
+    )
 
     if record_trajectory:
         env = TrajectoryRecorderWrapper(

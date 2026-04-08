@@ -10,7 +10,7 @@ def test_split_manifests_are_disjoint_and_expected_size():
     for variant in VARIANT_SPECS:
         train = get_layout_seeds(variant, "train")
         test = get_layout_seeds(variant, "test")
-        assert len(train) == 24
+        assert len(train) == 32
         assert len(test) == 8
         assert set(train).isdisjoint(test)
 
