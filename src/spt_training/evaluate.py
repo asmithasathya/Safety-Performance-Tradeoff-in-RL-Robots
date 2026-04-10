@@ -68,6 +68,7 @@ def build_evaluate_parser():
     parser.add_argument("--split", choices=("train", "test"), required=True)
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--episodes-per-seed", type=int, default=1)
+    parser.add_argument("--render", dest="render_mode", choices=("human",), default=None)
     parser.add_argument(
         "--stochastic",
         action="store_true",
@@ -106,6 +107,7 @@ def evaluate_run(
     episodes_per_seed=1,
     deterministic=True,
     show_progress=True,
+    render_mode=None,
 ):
     """Evaluate one checkpoint across every layout seed for a chosen split."""
     try:
@@ -123,6 +125,8 @@ def evaluate_run(
 
     if episodes_per_seed <= 0:
         raise ValueError("episodes_per_seed must be > 0.")
+    if render_mode not in (None, "human"):
+        raise ValueError("render_mode must be None or 'human'.")
 
     if output_dir is None:
         output_dir = run_dir / "evaluations" / checkpoint_path.stem / split
@@ -130,15 +134,18 @@ def evaluate_run(
 
     if show_progress:
         print(
-            "[eval] loading checkpoint={} baseline={} variant={} run_seed={} split={} deterministic={}".format(
+            "[eval] loading checkpoint={} baseline={} variant={} run_seed={} split={} deterministic={} render_mode={}".format(
                 checkpoint_path.name,
                 run_config["baseline"],
                 run_config["variant"],
                 int(run_config["seed"]),
                 split,
                 bool(deterministic),
+                render_mode,
             )
         )
+        if render_mode == "human":
+            print("[eval] human rendering is enabled; evaluation will run more slowly.")
 
     model = PPO.load(str(checkpoint_path), device="auto")
     rows = []
@@ -171,6 +178,7 @@ def evaluate_run(
                 split=split,
                 layout_seed=layout_seed,
                 api="gym",
+                render_mode=render_mode,
                 **eval_env_kwargs,
             )
             observation, info = env.reset()

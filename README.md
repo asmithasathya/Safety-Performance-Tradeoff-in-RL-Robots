@@ -145,6 +145,8 @@ python scripts/check_env.py --variant easy --split train --layout-seed 0 --episo
 
 Training saves checkpoints and logs, then automatically evaluates the final checkpoint on both the `train` and `test` splits.
 
+If you want to watch the simulator live for debugging or demos, add `--render human` to the training or manual evaluation command. Leave rendering off for normal experiments because it slows the run down significantly.
+
 You will see console progress during:
 
 - PPO training start
@@ -197,6 +199,12 @@ This is a pilot run, not a final experiment. It is meant to verify that:
 - automatic evaluation runs after training completes
 - the output folder structure looks right before you scale up to longer runs
 
+If you want to watch that same run in the simulator, add:
+
+```bash
+--render human
+```
+
 ### Reward-Penalty Example
 
 ```bash
@@ -222,6 +230,18 @@ python scripts/train_baseline.py \
   --budget 10 \
   --lagrangian-lr 0.05 \
   --output-dir results/lagrangian/medium/seed0_budget10
+```
+
+### Manual Evaluation With Rendering
+
+If you want to watch a trained checkpoint instead of training live, run:
+
+```bash
+python scripts/evaluate_baseline.py \
+  --run-dir results/reward_penalty/easy/seed0_lambda0p3_up_pilot \
+  --checkpoint final_model.zip \
+  --split test \
+  --render human
 ```
 
 ### Metrics Logged During Training

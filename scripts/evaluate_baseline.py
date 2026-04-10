@@ -12,6 +12,7 @@ def main():
         output_dir=args.output_dir,
         episodes_per_seed=args.episodes_per_seed,
         deterministic=not args.stochastic,
+        render_mode=args.render_mode,
     )
     for key, value in outputs.items():
         print("{}: {}".format(key, value))

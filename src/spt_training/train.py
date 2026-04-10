@@ -47,6 +47,7 @@ class TrainingRunConfig:
     total_timesteps: int
     save_freq: int
     output_dir: str
+    render_mode: str | None = None
     penalty_coeff: float | None = None
     budget: float | None = None
     lagrangian_lr: float | None = None
@@ -64,6 +65,8 @@ class TrainingRunConfig:
             raise ValueError("total_timesteps must be > 0.")
         if self.save_freq <= 0:
             raise ValueError("save_freq must be > 0.")
+        if self.render_mode not in (None, "human"):
+            raise ValueError("render_mode must be None or 'human'.")
         if self.baseline == "reward_penalty":
             if self.penalty_coeff is None:
                 raise ValueError(
@@ -125,6 +128,7 @@ def build_train_parser():
     parser.add_argument("--total-timesteps", type=int, required=True)
     parser.add_argument("--save-freq", type=int, default=50_000)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--render", dest="render_mode", choices=("human",), default=None)
     parser.add_argument("--penalty-coeff", type=float, default=None)
     parser.add_argument("--budget", type=float, default=None)
     parser.add_argument("--lagrangian-lr", type=float, default=None)
@@ -142,6 +146,7 @@ def training_run_config_from_args(args):
         total_timesteps=int(args.total_timesteps),
         save_freq=int(args.save_freq),
         output_dir=args.output_dir,
+        render_mode=args.render_mode,
         penalty_coeff=args.penalty_coeff,
         budget=args.budget,
         lagrangian_lr=args.lagrangian_lr,
@@ -244,18 +249,22 @@ def train_run(config, ppo_kwargs=None):
         variant=config.variant,
         seed=config.seed,
         api="gym",
+        render_mode=config.render_mode,
         **_baseline_env_kwargs(config),
     )
     print(
-        "[train] starting baseline={} variant={} run_seed={} total_timesteps={} save_freq={} output_dir={}".format(
+        "[train] starting baseline={} variant={} run_seed={} total_timesteps={} save_freq={} render_mode={} output_dir={}".format(
             config.baseline,
             config.variant,
             int(config.seed),
             int(config.total_timesteps),
             int(config.save_freq),
+            config.render_mode,
             run_dir,
         )
     )
+    if config.render_mode == "human":
+        print("[train] human rendering is enabled; training and auto-evaluation will run much slower.")
 
     class EpisodeMetricsCallback(BaseCallback):
         """Record episode metrics and save checkpoints during PPO training."""
@@ -426,6 +435,7 @@ def train_run(config, ppo_kwargs=None):
             "checkpoint": "final_model.zip",
             "splits": ["train", "test"],
             "episodes_per_seed": 1,
+            "render_mode": config.render_mode,
         },
     }
 
@@ -440,6 +450,7 @@ def train_run(config, ppo_kwargs=None):
             episodes_per_seed=1,
             deterministic=True,
             show_progress=True,
+            render_mode=config.render_mode,
         )
         auto_eval_outputs[split] = split_outputs
     evaluation_manifest["auto_evaluation_outputs"] = auto_eval_outputs
