@@ -104,10 +104,19 @@ class StandardizeSafetyInfoWrapper(gymnasium.Wrapper):
 class RewardPenaltyWrapper(gymnasium.Wrapper):
     """Reward-penalty baseline: r_shaped = r - penalty_coeff * cost.
 
-    Operates on the safe (6-tuple) API.  The unpenalized reward is stored in
-    ``info["reward_unpenalized"]`` on every step so callers can distinguish
-    task performance from safety penalties.  At episode end, the cumulative
-    penalized return is reported as ``info["episode_penalized_return"]``.
+    λ (penalty_coeff) is a fixed hyperparameter chosen before training.
+    The policy is trained to maximise the shaped reward; there is no mechanism
+    to enforce a cost budget — the resulting cost is whatever the policy learns.
+
+    Operates on the safe (6-tuple) API.
+
+    Per-step info keys added:
+        ``reward_unpenalized`` – raw task reward r (before penalty)
+        ``penalty_coeff``      – the fixed λ used for shaping
+
+    Episode-end info keys added:
+        ``episode_penalized_return`` – sum of shaped rewards over the episode
+                                       (what the policy actually optimised)
     """
 
     def __init__(self, env, penalty_coeff):
@@ -126,9 +135,11 @@ class RewardPenaltyWrapper(gymnasium.Wrapper):
     def step(self, action):
         observation, reward, cost, terminated, truncated, info = self.env.step(action)
         info = dict(info)
-        shaped_reward = float(reward) - self.penalty_coeff * float(cost)
+        reward = float(reward)
+        cost = float(cost)
+        shaped_reward = reward - self.penalty_coeff * cost
         self._episode_penalized_return += shaped_reward
-        info["reward_unpenalized"] = float(reward)
+        info["reward_unpenalized"] = reward
         info["penalty_coeff"] = self.penalty_coeff
         if terminated or truncated:
             info["episode_penalized_return"] = self._episode_penalized_return
@@ -138,27 +149,33 @@ class RewardPenaltyWrapper(gymnasium.Wrapper):
 class LagrangianWrapper(gymnasium.Wrapper):
     """Lagrangian constrained RL baseline.
 
-    Maintains a dual variable λ ≥ 0 that is updated at the end of every
-    episode via a dual gradient ascent step:
+    Maintains a dual variable λ ≥ 0 that is updated between episodes via a
+    dual gradient ascent step to automatically enforce E[C] ≤ budget:
 
-        λ ← max(0, λ + lr_lambda * (episode_cost − budget))
+        λ_new = max(0, λ + lr_lambda * (episode_cost − budget))
 
-    During each rollout the reward is shaped with the *current* λ:
+    λ increases when the episode cost exceeds the budget (making the penalty
+    heavier, discouraging constraint violations) and decreases when the policy
+    is safely under budget (relaxing the penalty).  Over training λ converges
+    to the Lagrange multiplier that enforces the constraint at the boundary.
+
+    The reward shaped during each episode uses the λ from the START of that
+    episode (i.e. λ is held constant within an episode and only updated at the
+    end):
 
         r_shaped = r − λ * cost
 
-    This drives λ up when the cost budget is exceeded and down when the policy
-    is safely under budget, automatically finding the Lagrange multiplier that
-    enforces the constraint at the boundary.
+    Operates on the safe (6-tuple) API.
 
-    Operates on the safe (6-tuple) API.  Per-step info keys added:
-        ``reward_unpenalized``   – raw task reward before penalty
-        ``lagrangian_lambda``    – λ value used for this step
+    Per-step info keys added:
+        ``reward_unpenalized``   – raw task reward r (before penalty)
+        ``lagrangian_lambda``    – λ used to shape THIS step's reward
         ``budget``               – the cost budget B
 
-    Episode-end info keys added:
-        ``episode_penalized_return`` – cumulative shaped return for this episode
-        ``lagrangian_lambda``        – λ *after* the dual update (updated value)
+    Episode-end info keys added (in addition to the above):
+        ``episode_penalized_return``      – sum of shaped rewards this episode
+        ``lagrangian_lambda_before_update`` – λ used throughout this episode
+        ``lagrangian_lambda_after_update``  – new λ for the next episode
     """
 
     def __init__(self, env, budget, lr_lambda, init_lambda=0.0):
@@ -175,29 +192,165 @@ class LagrangianWrapper(gymnasium.Wrapper):
         self._episode_penalized_return = 0.0
 
     def reset(self, *, seed=None, options=None):
+        # λ intentionally NOT reset — it accumulates across the full training run.
         self._episode_penalized_return = 0.0
         return self.env.reset(seed=seed, options=options)
 
     def step(self, action):
         observation, reward, cost, terminated, truncated, info = self.env.step(action)
         info = dict(info)
-        lambda_before_update = self.lambda_
-        shaped_reward = float(reward) - lambda_before_update * float(cost)
+        reward = float(reward)
+        cost = float(cost)
+
+        # Capture λ for this episode before any update.
+        lambda_this_episode = self.lambda_
+        shaped_reward = reward - lambda_this_episode * cost
         self._episode_penalized_return += shaped_reward
-        info["reward_unpenalized"] = float(reward)
-        info["lagrangian_lambda"] = lambda_before_update
+
+        # lagrangian_lambda always reflects the λ used for THIS step's shaping.
+        info["reward_unpenalized"] = reward
+        info["lagrangian_lambda"] = lambda_this_episode
         info["budget"] = self.budget
+
         if terminated or truncated:
-            info["episode_penalized_return"] = self._episode_penalized_return
             episode_cost = info.get("episode_cost", 0.0)
+            # Dual update: λ ← max(0, λ + α * (C_ep − B))
             self.lambda_ = max(
-                0.0, lambda_before_update + self.lr_lambda * (episode_cost - self.budget)
+                0.0,
+                lambda_this_episode + self.lr_lambda * (episode_cost - self.budget),
             )
-            info["lagrangian_lambda_before_update"] = lambda_before_update
+            info["episode_penalized_return"] = self._episode_penalized_return
+            info["lagrangian_lambda_before_update"] = lambda_this_episode
             info["lagrangian_lambda_after_update"] = self.lambda_
-            # Overwrite with the post-update value so callers see the new λ.
-            info["lagrangian_lambda"] = self.lambda_
+
         return observation, shaped_reward, cost, terminated, truncated, info
+
+
+class RuleBasedShieldWrapper(gymnasium.Wrapper):
+    """Rule-based safety shield: intercepts actions that would move the agent
+    too close to a hazard and replaces them with a repulsive action.
+
+    The shield reads the agent and hazard positions directly from the
+    Safety-Gymnasium task state *before* each step.  If the agent is within
+    ``warning_radius`` metres of any hazard centre it replaces the proposed
+    action with a unit repulsive vector (weighted sum away from all nearby
+    hazards), scaled to the action-space limits.  Otherwise the original
+    action passes through unchanged.
+
+    This is a purely reactive, learning-free baseline.  It operates on the
+    safe (6-tuple) API and adds no reward shaping — the policy trains on the
+    unmodified task reward.  The cost it sees is lower than without the shield
+    because fewer hazard collisions occur.
+
+    Operates on the safe (6-tuple) API.
+
+    Per-step info keys added:
+        ``shield_intervened``            – True if the action was replaced
+        ``episode_shield_interventions`` – running intervention count
+
+    Episode-end info keys added:
+        ``shield_intervention_rate`` – interventions / episode_length
+    """
+
+    # Default warning distance: keepout radius + a reaction margin.
+    _DEFAULT_WARNING_RADIUS = 0.28  # DEFAULT_HAZARD_KEEPOUT (0.18) + 0.10
+
+    def __init__(self, env, warning_radius=None):
+        super().__init__(env)
+        if warning_radius is None:
+            warning_radius = self._DEFAULT_WARNING_RADIUS
+        if warning_radius <= 0:
+            raise ValueError(
+                "warning_radius must be > 0, got {!r}".format(warning_radius)
+            )
+        self.warning_radius = float(warning_radius)
+        self._episode_interventions = 0
+        self._episode_steps = 0
+
+    def reset(self, *, seed=None, options=None):
+        self._episode_interventions = 0
+        self._episode_steps = 0
+        return self.env.reset(seed=seed, options=options)
+
+    # ------------------------------------------------------------------
+    # State access helpers
+    # ------------------------------------------------------------------
+
+    def _get_agent_xy(self):
+        """Return the agent's (x, y) position from the underlying task, or None."""
+        try:
+            pos = self.env.unwrapped.task.agent.pos
+            return np.asarray(pos, dtype=float)[:2]
+        except AttributeError:
+            return None
+
+    def _get_hazard_xys(self):
+        """Return (n_hazards, 2) hazard positions from the underlying task, or None."""
+        try:
+            pos = self.env.unwrapped.task.hazards.pos  # (n_hazards, 3)
+            return np.asarray(pos, dtype=float)[:, :2]
+        except AttributeError:
+            return None
+
+    # ------------------------------------------------------------------
+    # Safe action computation
+    # ------------------------------------------------------------------
+
+    def _repulsive_action(self, agent_xy, hazard_xys):
+        """Unit repulsive vector away from all nearby hazards, scaled to action limits."""
+        diffs = agent_xy - hazard_xys          # (n_hazards, 2)
+        dists = np.linalg.norm(diffs, axis=1)  # (n_hazards,)
+        dists = np.maximum(dists, 1e-6)        # avoid division by zero
+
+        # Inverse-square weighting: closer hazards contribute more force.
+        weights = 1.0 / (dists ** 2)
+        repulsive = np.sum(weights[:, None] * (diffs / dists[:, None]), axis=0)
+
+        norm = np.linalg.norm(repulsive)
+        if norm < 1e-8:
+            # Degenerate case (equidistant or on top of hazard): move in +x.
+            repulsive = np.array([1.0, 0.0])
+        else:
+            repulsive = repulsive / norm
+
+        # Scale to the action-space magnitude.
+        high = np.asarray(self.action_space.high, dtype=float)
+        scale = float(np.min(high[:2]))
+        return np.clip(repulsive * scale, self.action_space.low, self.action_space.high)
+
+    # ------------------------------------------------------------------
+    # Core step
+    # ------------------------------------------------------------------
+
+    def step(self, action):
+        action = np.asarray(action, dtype=float)
+        intervened = False
+
+        agent_xy = self._get_agent_xy()
+        if agent_xy is not None:
+            haz_xys = self._get_hazard_xys()
+            if haz_xys is not None and len(haz_xys) > 0:
+                dists = np.linalg.norm(haz_xys - agent_xy, axis=1)
+                if np.any(dists < self.warning_radius):
+                    action = self._repulsive_action(agent_xy, haz_xys)
+                    intervened = True
+
+        observation, reward, cost, terminated, truncated, info = self.env.step(action)
+        info = dict(info)
+
+        self._episode_steps += 1
+        if intervened:
+            self._episode_interventions += 1
+
+        info["shield_intervened"] = intervened
+        info["episode_shield_interventions"] = self._episode_interventions
+
+        if terminated or truncated:
+            info["shield_intervention_rate"] = (
+                self._episode_interventions / max(1, self._episode_steps)
+            )
+
+        return observation, reward, cost, terminated, truncated, info
 
 
 class SafetyToGymWrapper(gymnasium.Wrapper):

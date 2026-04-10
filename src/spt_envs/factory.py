@@ -7,6 +7,7 @@ from spt_envs.wrappers import (
     FixedLayoutSeedWrapper,
     LagrangianWrapper,
     RewardPenaltyWrapper,
+    RuleBasedShieldWrapper,
     SafetyToGymWrapper,
     StandardizeSafetyInfoWrapper,
     TrainLayoutSeedWrapper,
@@ -36,11 +37,17 @@ def _apply_baseline_wrappers(
     lagrangian_budget=None,
     lagrangian_lr=None,
     lagrangian_init_lambda=0.0,
+    shield_warning_radius=None,
 ):
-    if penalty_coeff is not None and lagrangian_budget is not None:
+    active = sum([
+        penalty_coeff is not None,
+        lagrangian_budget is not None,
+        shield_warning_radius is not None,
+    ])
+    if active > 1:
         raise ValueError(
-            "penalty_coeff and lagrangian_budget are mutually exclusive; "
-            "choose one baseline at a time."
+            "penalty_coeff, lagrangian_budget, and shield_warning_radius are "
+            "mutually exclusive; choose one baseline at a time."
         )
 
     if penalty_coeff is not None:
@@ -58,6 +65,9 @@ def _apply_baseline_wrappers(
             init_lambda=lagrangian_init_lambda,
         )
 
+    if shield_warning_radius is not None:
+        env = RuleBasedShieldWrapper(env, warning_radius=shield_warning_radius)
+
     return env
 
 
@@ -72,6 +82,7 @@ def make_env(
     lagrangian_budget=None,
     lagrangian_lr=None,
     lagrangian_init_lambda=0.0,
+    shield_warning_radius=None,
 ):
     """Instantiate a local PointGoal environment with a stable project contract."""
     import safety_gymnasium
@@ -99,6 +110,7 @@ def make_env(
         lagrangian_budget=lagrangian_budget,
         lagrangian_lr=lagrangian_lr,
         lagrangian_init_lambda=lagrangian_init_lambda,
+        shield_warning_radius=shield_warning_radius,
     )
 
     if record_trajectory:
@@ -123,6 +135,7 @@ def make_train_env(
     lagrangian_budget=None,
     lagrangian_lr=None,
     lagrangian_init_lambda=0.0,
+    shield_warning_radius=None,
 ):
     """Instantiate a training env that samples a train layout seed on each reset."""
     import safety_gymnasium
@@ -152,6 +165,7 @@ def make_train_env(
         lagrangian_budget=lagrangian_budget,
         lagrangian_lr=lagrangian_lr,
         lagrangian_init_lambda=lagrangian_init_lambda,
+        shield_warning_radius=shield_warning_radius,
     )
 
     if record_trajectory:

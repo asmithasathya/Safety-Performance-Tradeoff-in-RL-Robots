@@ -104,10 +104,21 @@ def test_dual_update_formula(env):
         done = bool(terminated or truncated)
 
     episode_cost = info["episode_cost"]
-    expected_lambda = max(0.0, lambda_before + LR_LAMBDA * (episode_cost - BUDGET))
-    assert env.lambda_ == pytest.approx(expected_lambda)
-    # info["lagrangian_lambda"] reflects the post-update value
-    assert info["lagrangian_lambda"] == pytest.approx(expected_lambda)
+    expected_lambda_after = max(0.0, lambda_before + LR_LAMBDA * (episode_cost - BUDGET))
+
+    # env.lambda_ is now the post-update value (for the next episode).
+    assert env.lambda_ == pytest.approx(expected_lambda_after)
+
+    # info["lagrangian_lambda"] always reflects the λ used for reward shaping
+    # (before update) — consistent with every other step in the episode.
+    assert info["lagrangian_lambda"] == pytest.approx(lambda_before)
+
+    # The before/after split is explicitly captured at episode end.
+    assert info["lagrangian_lambda_before_update"] == pytest.approx(lambda_before)
+    assert info["lagrangian_lambda_after_update"] == pytest.approx(expected_lambda_after)
+
+    # Verify the shaped reward is recoverable from the pre-update λ in info.
+    # (Can't verify the final step's reward here, but the contract holds per-step.)
 
 
 def test_episode_penalized_return_consistent(env):

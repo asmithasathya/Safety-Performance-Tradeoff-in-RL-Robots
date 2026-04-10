@@ -31,6 +31,8 @@ TRAIN_METRIC_FIELDNAMES = (
     "lagrangian_lambda",
     "lagrangian_lambda_before_update",
     "lagrangian_lambda_after_update",
+    "episode_shield_interventions",
+    "shield_intervention_rate",
 )
 
 
@@ -48,14 +50,14 @@ class TrainingRunConfig:
     budget: float | None = None
     lagrangian_lr: float | None = None
     lagrangian_init_lambda: float = 0.0
+    shield_warning_radius: float | None = None
 
     def validate(self):
         """Validate the baseline-specific argument contract."""
-        if self.baseline not in ("reward_penalty", "lagrangian"):
+        if self.baseline not in ("reward_penalty", "lagrangian", "shield"):
             raise ValueError(
-                "baseline must be 'reward_penalty' or 'lagrangian', got {!r}".format(
-                    self.baseline
-                )
+                "baseline must be 'reward_penalty', 'lagrangian', or 'shield', "
+                "got {!r}".format(self.baseline)
             )
         if self.total_timesteps <= 0:
             raise ValueError("total_timesteps must be > 0.")
@@ -91,6 +93,14 @@ class TrainingRunConfig:
                 raise ValueError(
                     "lagrangian baseline does not accept --penalty-coeff."
                 )
+        if self.baseline == "shield":
+            if self.penalty_coeff is not None or self.budget is not None or self.lagrangian_lr is not None:
+                raise ValueError(
+                    "shield baseline does not accept --penalty-coeff, --budget, "
+                    "or --lagrangian-lr."
+                )
+            if self.shield_warning_radius is not None and self.shield_warning_radius <= 0:
+                raise ValueError("shield_warning_radius must be > 0.")
 
     def to_dict(self):
         """Serialize the run config for JSON output."""
@@ -102,7 +112,7 @@ def build_train_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--baseline",
-        choices=("reward_penalty", "lagrangian"),
+        choices=("reward_penalty", "lagrangian", "shield"),
         required=True,
     )
     parser.add_argument(
@@ -118,6 +128,7 @@ def build_train_parser():
     parser.add_argument("--budget", type=float, default=None)
     parser.add_argument("--lagrangian-lr", type=float, default=None)
     parser.add_argument("--lagrangian-init-lambda", type=float, default=0.0)
+    parser.add_argument("--shield-warning-radius", type=float, default=None)
     return parser
 
 
@@ -134,6 +145,7 @@ def training_run_config_from_args(args):
         budget=args.budget,
         lagrangian_lr=args.lagrangian_lr,
         lagrangian_init_lambda=args.lagrangian_init_lambda,
+        shield_warning_radius=args.shield_warning_radius,
     )
     config.validate()
     return config
@@ -142,22 +154,30 @@ def training_run_config_from_args(args):
 def _baseline_env_kwargs(config):
     if config.baseline == "reward_penalty":
         return {"penalty_coeff": config.penalty_coeff}
-    return {
-        "lagrangian_budget": config.budget,
-        "lagrangian_lr": config.lagrangian_lr,
-        "lagrangian_init_lambda": config.lagrangian_init_lambda,
-    }
+    if config.baseline == "lagrangian":
+        return {
+            "lagrangian_budget": config.budget,
+            "lagrangian_lr": config.lagrangian_lr,
+            "lagrangian_init_lambda": config.lagrangian_init_lambda,
+        }
+    if config.baseline == "shield":
+        return {"shield_warning_radius": config.shield_warning_radius}
+    return {}
 
 
 def _extract_baseline_state(training_env, config):
     if config.baseline == "reward_penalty":
         penalty_coeff = training_env.get_attr("penalty_coeff")[0]
         return {"penalty_coeff": float(penalty_coeff)}
-    lambda_value = training_env.get_attr("lambda_")[0]
-    return {
-        "budget": float(config.budget),
-        "lagrangian_lambda": float(lambda_value),
-    }
+    if config.baseline == "lagrangian":
+        lambda_value = training_env.get_attr("lambda_")[0]
+        return {
+            "budget": float(config.budget),
+            "lagrangian_lambda": float(lambda_value),
+        }
+    if config.baseline == "shield":
+        return {"shield_warning_radius": config.shield_warning_radius}
+    return {}
 
 
 def _checkpoint_metadata(
@@ -290,6 +310,10 @@ def train_run(config, ppo_kwargs=None):
                     "lagrangian_lambda_after_update": info.get(
                         "lagrangian_lambda_after_update"
                     ),
+                    "episode_shield_interventions": info.get(
+                        "episode_shield_interventions"
+                    ),
+                    "shield_intervention_rate": info.get("shield_intervention_rate"),
                 }
                 _write_train_metric_row(metrics_path, row)
 

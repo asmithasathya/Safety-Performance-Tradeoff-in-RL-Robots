@@ -61,6 +61,7 @@ def aggregate_results(results_root, split, output_dir, budgets=DEFAULT_BUDGETS):
     reward_penalty_rows = []
     grouped_reward_penalty = defaultdict(list)
     lagrangian_rows = []
+    shield_rows = []
 
     for row in rows:
         baseline = row.get("baseline")
@@ -71,6 +72,8 @@ def aggregate_results(results_root, split, output_dir, budgets=DEFAULT_BUDGETS):
             budget = float(row.get("budget"))
             if budget in budgets:
                 lagrangian_rows.append(row)
+        elif baseline == "shield":
+            shield_rows.append(row)
 
     for (variant, split_name, run_seed), candidates in grouped_reward_penalty.items():
         for target_budget in budgets:
@@ -143,7 +146,38 @@ def aggregate_results(results_root, split, output_dir, budgets=DEFAULT_BUDGETS):
     ]
     _write_csv(lagrangian_path, lagrangian_fieldnames, lagrangian_output_rows)
 
+    shield_path = output_dir / "shield_summary.csv"
+    shield_fieldnames = (
+        "variant",
+        "split",
+        "run_seed",
+        "shield_warning_radius",
+        "mean_episode_cost",
+        "mean_episode_return",
+        "mean_goals_achieved",
+        "mean_shield_intervention_rate",
+        "checkpoint_name",
+        "summary_path",
+    )
+    shield_output_rows = [
+        {
+            "variant": row.get("variant"),
+            "split": row.get("split"),
+            "run_seed": row.get("run_seed"),
+            "shield_warning_radius": row.get("shield_warning_radius"),
+            "mean_episode_cost": row.get("mean_episode_cost"),
+            "mean_episode_return": row.get("mean_episode_return"),
+            "mean_goals_achieved": row.get("mean_goals_achieved"),
+            "mean_shield_intervention_rate": row.get("mean_shield_intervention_rate"),
+            "checkpoint_name": row.get("checkpoint_name"),
+            "summary_path": row.get("summary_path"),
+        }
+        for row in shield_rows
+    ]
+    _write_csv(shield_path, shield_fieldnames, shield_output_rows)
+
     return {
         "reward_penalty_budget_matches": str(reward_penalty_path),
         "lagrangian_budget_summary": str(lagrangian_path),
+        "shield_summary": str(shield_path),
     }

@@ -29,6 +29,9 @@ EVAL_EPISODE_FIELDNAMES = (
     "penalty_coeff",
     "budget",
     "lagrangian_lambda",
+    "shield_warning_radius",
+    "episode_shield_interventions",
+    "shield_intervention_rate",
 )
 
 EVAL_SUMMARY_FIELDNAMES = (
@@ -43,6 +46,7 @@ EVAL_SUMMARY_FIELDNAMES = (
     "penalty_coeff",
     "budget",
     "lagrangian_lambda",
+    "shield_warning_radius",
     "mean_episode_return",
     "std_episode_return",
     "mean_episode_cost",
@@ -51,6 +55,8 @@ EVAL_SUMMARY_FIELDNAMES = (
     "std_goals_achieved",
     "mean_episode_length",
     "std_episode_length",
+    "mean_shield_intervention_rate",
+    "std_shield_intervention_rate",
 )
 
 
@@ -125,6 +131,13 @@ def evaluate_run(
     rows = []
     seeds = get_layout_seeds(run_config["variant"], split)
 
+    # For the shield baseline the shield must be active during evaluation too,
+    # because the policy was trained with it and expects its dynamics.
+    baseline = run_config.get("baseline")
+    eval_env_kwargs = {}
+    if baseline == "shield":
+        eval_env_kwargs["shield_warning_radius"] = run_config.get("shield_warning_radius")
+
     for layout_seed in seeds:
         for episode_index in range(int(episodes_per_seed)):
             env = make_env(
@@ -132,6 +145,7 @@ def evaluate_run(
                 split=split,
                 layout_seed=layout_seed,
                 api="gym",
+                **eval_env_kwargs,
             )
             observation, info = env.reset()
             _ = info
@@ -160,6 +174,9 @@ def evaluate_run(
                     "penalty_coeff": checkpoint_metadata.get("penalty_coeff"),
                     "budget": checkpoint_metadata.get("budget"),
                     "lagrangian_lambda": checkpoint_metadata.get("lagrangian_lambda"),
+                    "shield_warning_radius": checkpoint_metadata.get("shield_warning_radius"),
+                    "episode_shield_interventions": info.get("episode_shield_interventions"),
+                    "shield_intervention_rate": info.get("shield_intervention_rate"),
                 }
             )
 
@@ -170,6 +187,10 @@ def evaluate_run(
     costs = np.array([row["episode_cost"] for row in rows], dtype=float)
     goals = np.array([row["goals_achieved"] for row in rows], dtype=float)
     lengths = np.array([row["episode_length"] for row in rows], dtype=float)
+    shield_rates_raw = [row.get("shield_intervention_rate") for row in rows]
+    shield_rates = np.array(
+        [r for r in shield_rates_raw if r is not None], dtype=float
+    )
     summary_row = {
         "baseline": run_config["baseline"],
         "variant": run_config["variant"],
@@ -182,6 +203,7 @@ def evaluate_run(
         "penalty_coeff": checkpoint_metadata.get("penalty_coeff"),
         "budget": checkpoint_metadata.get("budget"),
         "lagrangian_lambda": checkpoint_metadata.get("lagrangian_lambda"),
+        "shield_warning_radius": checkpoint_metadata.get("shield_warning_radius"),
         "mean_episode_return": float(returns.mean()),
         "std_episode_return": float(returns.std(ddof=0)),
         "mean_episode_cost": float(costs.mean()),
@@ -190,6 +212,8 @@ def evaluate_run(
         "std_goals_achieved": float(goals.std(ddof=0)),
         "mean_episode_length": float(lengths.mean()),
         "std_episode_length": float(lengths.std(ddof=0)),
+        "mean_shield_intervention_rate": float(shield_rates.mean()) if len(shield_rates) else None,
+        "std_shield_intervention_rate": float(shield_rates.std(ddof=0)) if len(shield_rates) else None,
     }
 
     eval_summary_path = output_dir / "eval_summary.csv"
