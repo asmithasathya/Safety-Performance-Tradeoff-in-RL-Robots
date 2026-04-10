@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from spt_envs.factory import make_train_env
+from spt_training.evaluate import evaluate_run
 from spt_training.common import DEFAULT_PPO_KWARGS, ensure_directory, write_json
 
 
@@ -217,7 +218,7 @@ def train_run(config, ppo_kwargs=None):
     except ImportError as exc:  # pragma: no cover - import path only exercised locally
         raise ImportError(
             "Training requires the 'train' dependencies. "
-            "Install them with: pip install -e \".[train,dev]\""
+            "Install them with: pip install -e \".[train]\""
         ) from exc
 
     run_dir = Path(config.output_dir)
@@ -245,6 +246,16 @@ def train_run(config, ppo_kwargs=None):
         api="gym",
         **_baseline_env_kwargs(config),
     )
+    print(
+        "[train] starting baseline={} variant={} run_seed={} total_timesteps={} save_freq={} output_dir={}".format(
+            config.baseline,
+            config.variant,
+            int(config.seed),
+            int(config.total_timesteps),
+            int(config.save_freq),
+            run_dir,
+        )
+    )
 
     class EpisodeMetricsCallback(BaseCallback):
         """Record episode metrics and save checkpoints during PPO training."""
@@ -254,6 +265,7 @@ def train_run(config, ppo_kwargs=None):
             self.start_time = None
             self.last_checkpoint_timestep = 0
             self.checkpoint_records = []
+            self.episode_count = 0
 
         def _elapsed(self):
             return max(0.0, time.monotonic() - self.start_time)
@@ -277,14 +289,27 @@ def train_run(config, ppo_kwargs=None):
             )
             write_json(checkpoint_path.with_suffix(".json"), metadata)
             self.checkpoint_records.append(metadata)
+            progress_pct = min(
+                100.0,
+                100.0 * float(self.num_timesteps) / float(config.total_timesteps),
+            )
+            print(
+                "[train] saved checkpoint={} timesteps={} progress={:.1f}%".format(
+                    checkpoint_path.name,
+                    int(self.num_timesteps),
+                    progress_pct,
+                )
+            )
 
         def _on_training_start(self):
             self.start_time = time.monotonic()
+            print("[train] PPO learning started")
 
         def _on_step(self):
             for info in self.locals.get("infos", ()):
                 if "episode_return" not in info:
                     continue
+                self.episode_count += 1
                 row = {
                     "timesteps": int(self.num_timesteps),
                     "elapsed_seconds": round(self._elapsed(), 6),
@@ -316,6 +341,30 @@ def train_run(config, ppo_kwargs=None):
                     "shield_intervention_rate": info.get("shield_intervention_rate"),
                 }
                 _write_train_metric_row(metrics_path, row)
+                progress_pct = min(
+                    100.0,
+                    100.0 * float(self.num_timesteps) / float(config.total_timesteps),
+                )
+                episode_message = (
+                    "[train] episode={} progress={:.1f}% timesteps={} layout_seed={} "
+                    "return={:.3f} penalized_return={:.3f} cost={:.3f} goals={} length={}"
+                ).format(
+                    int(self.episode_count),
+                    progress_pct,
+                    int(self.num_timesteps),
+                    int(info.get("layout_seed", -1)),
+                    float(info["episode_return"]),
+                    float(info.get("episode_penalized_return", info["episode_return"])),
+                    float(info["episode_cost"]),
+                    int(info.get("goals_achieved", 0)),
+                    int(info.get("episode_length", 0)),
+                )
+                if config.baseline == "lagrangian":
+                    episode_message += " lambda_before={:.4f} lambda_after={:.4f}".format(
+                        float(info.get("lagrangian_lambda_before_update", 0.0)),
+                        float(info.get("lagrangian_lambda_after_update", 0.0)),
+                    )
+                print(episode_message)
 
             if self.num_timesteps - self.last_checkpoint_timestep >= config.save_freq:
                 self.last_checkpoint_timestep = int(self.num_timesteps)
@@ -344,6 +393,12 @@ def train_run(config, ppo_kwargs=None):
         training_env=model.get_env(),
     )
     write_json(run_dir / "final_model.json", final_metadata)
+    print(
+        "[train] finished timesteps={} final_checkpoint={}".format(
+            int(model.num_timesteps),
+            final_checkpoint_path.name,
+        )
+    )
 
     evaluation_manifest = {
         "baseline": config.baseline,
@@ -367,13 +422,34 @@ def train_run(config, ppo_kwargs=None):
                 run_dir
             ),
         },
+        "auto_evaluation": {
+            "checkpoint": "final_model.zip",
+            "splits": ["train", "test"],
+            "episodes_per_seed": 1,
+        },
     }
-    write_json(run_dir / "evaluation_manifest.json", evaluation_manifest)
 
     env.close()
+    print("[train] running automatic evaluation for final_model.zip on train and test splits")
+    auto_eval_outputs = {}
+    for split in ("train", "test"):
+        split_outputs = evaluate_run(
+            run_dir=run_dir,
+            checkpoint_name=final_checkpoint_path.name,
+            split=split,
+            episodes_per_seed=1,
+            deterministic=True,
+            show_progress=True,
+        )
+        auto_eval_outputs[split] = split_outputs
+    evaluation_manifest["auto_evaluation_outputs"] = auto_eval_outputs
+    write_json(run_dir / "evaluation_manifest.json", evaluation_manifest)
+
     return {
         "run_dir": str(run_dir),
         "train_metrics_csv": str(metrics_path),
         "final_checkpoint": str(final_checkpoint_path),
         "evaluation_manifest": str(run_dir / "evaluation_manifest.json"),
+        "auto_train_eval_summary": auto_eval_outputs["train"]["eval_summary_csv"],
+        "auto_test_eval_summary": auto_eval_outputs["test"]["eval_summary_csv"],
     }

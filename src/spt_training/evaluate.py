@@ -105,6 +105,7 @@ def evaluate_run(
     output_dir=None,
     episodes_per_seed=1,
     deterministic=True,
+    show_progress=True,
 ):
     """Evaluate one checkpoint across every layout seed for a chosen split."""
     try:
@@ -112,7 +113,7 @@ def evaluate_run(
     except ImportError as exc:  # pragma: no cover - import path only exercised locally
         raise ImportError(
             "Evaluation requires the 'train' dependencies. "
-            "Install them with: pip install -e \".[train,dev]\""
+            "Install them with: pip install -e \".[train]\""
         ) from exc
 
     run_dir, checkpoint_path, checkpoint_metadata = _resolve_run_artifacts(
@@ -127,9 +128,23 @@ def evaluate_run(
         output_dir = run_dir / "evaluations" / checkpoint_path.stem / split
     output_dir = ensure_directory(output_dir)
 
+    if show_progress:
+        print(
+            "[eval] loading checkpoint={} baseline={} variant={} run_seed={} split={} deterministic={}".format(
+                checkpoint_path.name,
+                run_config["baseline"],
+                run_config["variant"],
+                int(run_config["seed"]),
+                split,
+                bool(deterministic),
+            )
+        )
+
     model = PPO.load(str(checkpoint_path), device="auto")
     rows = []
     seeds = get_layout_seeds(run_config["variant"], split)
+    total_eval_episodes = len(seeds) * int(episodes_per_seed)
+    completed_eval_episodes = 0
 
     # For the shield baseline the shield must be active during evaluation too,
     # because the policy was trained with it and expects its dynamics.
@@ -138,8 +153,19 @@ def evaluate_run(
     if baseline == "shield":
         eval_env_kwargs["shield_warning_radius"] = run_config.get("shield_warning_radius")
 
-    for layout_seed in seeds:
+    for seed_index, layout_seed in enumerate(seeds, start=1):
         for episode_index in range(int(episodes_per_seed)):
+            if show_progress:
+                print(
+                    "[eval] split={} layout_seed={} ({}/{}) episode {}/{}".format(
+                        split,
+                        int(layout_seed),
+                        seed_index,
+                        len(seeds),
+                        episode_index + 1,
+                        int(episodes_per_seed),
+                    )
+                )
             env = make_env(
                 variant=run_config["variant"],
                 split=split,
@@ -179,6 +205,18 @@ def evaluate_run(
                     "shield_intervention_rate": info.get("shield_intervention_rate"),
                 }
             )
+            completed_eval_episodes += 1
+            if show_progress:
+                print(
+                    "[eval] completed {}/{}: return={:.3f} cost={:.3f} goals={} length={}".format(
+                        completed_eval_episodes,
+                        total_eval_episodes,
+                        float(info["episode_return"]),
+                        float(info["episode_cost"]),
+                        int(info.get("goals_achieved", 0)),
+                        int(info.get("episode_length", 0)),
+                    )
+                )
 
     eval_episodes_path = output_dir / "eval_episodes.csv"
     _write_csv(eval_episodes_path, EVAL_EPISODE_FIELDNAMES, rows)
@@ -218,6 +256,15 @@ def evaluate_run(
 
     eval_summary_path = output_dir / "eval_summary.csv"
     _write_csv(eval_summary_path, EVAL_SUMMARY_FIELDNAMES, [summary_row])
+    if show_progress:
+        print(
+            "[eval] finished split={} mean_return={:.3f} mean_cost={:.3f} outputs={}".format(
+                split,
+                float(summary_row["mean_episode_return"]),
+                float(summary_row["mean_episode_cost"]),
+                output_dir,
+            )
+        )
     return {
         "eval_episodes_csv": str(eval_episodes_path),
         "eval_summary_csv": str(eval_summary_path),

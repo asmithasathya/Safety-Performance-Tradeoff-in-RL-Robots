@@ -6,7 +6,7 @@ This repository studies the true performance cost of different safety levels in 
 - a hand-tuned reward-penalty baseline
 - a Lagrangian constrained RL baseline with learned `lambda`
 - PPO training, checkpointing, and machine-readable training logs
-- manual evaluation on held-out layouts
+- automatic final-checkpoint evaluation on train and held-out test layouts
 - post-processing to match reward-penalty runs to target budgets
 
 The project target budgets are `B ∈ {0, 5, 10, 20, 35}`.
@@ -124,7 +124,7 @@ conda activate safe-rl-tradeoff
 Install the package plus training and test dependencies:
 
 ```bash
-pip install -e ".[train,dev]"
+pip install -e ".[train]"
 ```
 
 ## Environment Smoke Check
@@ -143,7 +143,15 @@ python scripts/check_env.py --variant easy --split train --layout-seed 0 --episo
 
 ## Training
 
-Training saves checkpoints and logs, but it does not automatically run evaluation.
+Training saves checkpoints and logs, then automatically evaluates the final checkpoint on both the `train` and `test` splits.
+
+You will see console progress during:
+
+- PPO training start
+- each completed training episode
+- each saved checkpoint
+- automatic final-checkpoint evaluation on `train`
+- automatic final-checkpoint evaluation on `test`
 
 Each training run writes:
 
@@ -153,6 +161,41 @@ Each training run writes:
 - `checkpoints/`
 - `final_model.zip`
 - `final_model.json`
+- automatic `eval_episodes.csv` and `eval_summary.csv` outputs for `train`
+- automatic `eval_episodes.csv` and `eval_summary.csv` outputs for `test`
+
+### First Experiment To Run
+
+If you want to confirm the full training pipeline works before launching a large sweep, start with this small reward-penalty pilot run:
+
+```bash
+python scripts/train_baseline.py \
+  --baseline reward_penalty \
+  --variant easy \
+  --seed 0 \
+  --total-timesteps 25000 \
+  --save-freq 5000 \
+  --penalty-coeff 0.3 \
+  --output-dir results/reward_penalty/easy/seed0_lambda0p3_pilot
+```
+
+What this command means:
+
+- `--baseline reward_penalty`: train the fixed-penalty baseline, not Lagrangian
+- `--variant easy`: use the easiest hazard configuration first
+- `--seed 0`: use run seed `0` for this training run
+- `--total-timesteps 25000`: give PPO a small pilot budget of 25,000 environment steps
+- `--save-freq 5000`: save checkpoints every 5,000 training steps
+- `--penalty-coeff 0.3`: use a mild fixed safety penalty `lambda = 0.3`
+- `--output-dir ...`: write all checkpoints and logs into one dedicated results folder
+
+This is a pilot run, not a final experiment. It is meant to verify that:
+
+- training launches correctly
+- checkpoints are saved
+- `train_metrics.csv` is populated
+- automatic evaluation runs after training completes
+- the output folder structure looks right before you scale up to longer runs
 
 ### Reward-Penalty Example
 
@@ -161,7 +204,7 @@ python scripts/train_baseline.py \
   --baseline reward_penalty \
   --variant medium \
   --seed 0 \
-  --total-timesteps 1000000 \
+  --total-timesteps 250000 \
   --save-freq 50000 \
   --penalty-coeff 1.0 \
   --output-dir results/reward_penalty/medium/seed0_lambda1p0
@@ -205,7 +248,9 @@ This gives you enough information to analyze learning speed later without runnin
 
 ## Evaluation
 
-Evaluation is set up as a separate manual step and is not triggered during training.
+Evaluation is automatically triggered at the end of each training run for the final checkpoint.
+
+You can still run evaluation manually if you want to re-evaluate a saved checkpoint, change the split, or rerun with different options.
 
 To evaluate a checkpoint on all held-out test layouts:
 
@@ -265,7 +310,7 @@ Use train-split aggregation to match reward-penalty coefficient sweeps to target
 
 ## Troubleshooting
 
-- If `safety_gymnasium` or MuJoCo fails to import, recreate the Conda env and reinstall with `pip install -e ".[train,dev]"`.
+- If `safety_gymnasium` or MuJoCo fails to import, recreate the Conda env and reinstall with `pip install -e ".[train]"`.
 - If `stable_baselines3` or `torch` is missing, the training and evaluation scripts will fail until the `train` extra is installed.
 - If a layout seed is rejected in fixed-layout evaluation, check `src/spt_envs/splits.py`.
 - If `output-dir` already exists and contains files, the training runner will refuse to overwrite it.
