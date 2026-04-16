@@ -166,6 +166,42 @@ Each training run writes:
 - automatic `eval_episodes.csv` and `eval_summary.csv` outputs for `train`
 - automatic `eval_episodes.csv` and `eval_summary.csv` outputs for `test`
 
+### Full Sweep Scripts
+
+If you want to launch a full baseline sweep inside `tmux` and let every run execute one after another, use these batch scripts:
+
+```bash
+bash scripts/run_reward_penalty_sweep.sh
+bash scripts/run_lagrangian_sweep.sh
+```
+
+Each script runs every combination it is responsible for and skips runs that already have both `final_model.zip` and `evaluation_manifest.json`.
+
+During the sweep, each script prints the current run number, completed count, skipped count, remaining count, and elapsed time.
+
+Default sweep coverage:
+
+- reward-penalty: `3 variants × 3 seeds × 7 penalty coefficients = 63 runs`
+- Lagrangian: `3 variants × 3 seeds × 5 budgets = 45 runs`
+
+The scripts use these defaults unless you override them in the shell before launching:
+
+- `TOTAL_TIMESTEPS=250000`
+- `SAVE_FREQ=50000`
+- `OUTPUT_ROOT=results`
+- `RENDER_MODE=` left empty by default
+- `LAGRANGIAN_LR=0.05` for the Lagrangian sweep
+- `LAGRANGIAN_INIT_LAMBDA=0.0` for the Lagrangian sweep
+
+Example `tmux` workflow:
+
+```bash
+tmux new -s saferl
+conda activate safe-rl-tradeoff
+cd /Users/asmitha/robot-learning/Safety-Performance-Tradeoff-in-RL-Robots
+bash scripts/run_reward_penalty_sweep.sh
+```
+
 ### First Experiment To Run
 
 If you want to confirm the full training pipeline works before launching a large sweep, start with this small reward-penalty pilot run:
