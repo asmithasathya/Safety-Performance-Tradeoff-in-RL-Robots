@@ -1,0 +1,102 @@
+{
+  "auto_evaluation": {
+    "checkpoint": "final_model.zip",
+    "episodes_per_seed": 1,
+    "render_mode": null,
+    "splits": [
+      "train",
+      "test"
+    ]
+  },
+  "auto_evaluation_outputs": {
+    "test": {
+      "eval_episodes_csv": "results/reward_penalty/easy/seed1_lambda3p0/evaluations/final_model/test/eval_episodes.csv",
+      "eval_summary_csv": "results/reward_penalty/easy/seed1_lambda3p0/evaluations/final_model/test/eval_summary.csv"
+    },
+    "train": {
+      "eval_episodes_csv": "results/reward_penalty/easy/seed1_lambda3p0/evaluations/final_model/train/eval_episodes.csv",
+      "eval_summary_csv": "results/reward_penalty/easy/seed1_lambda3p0/evaluations/final_model/train/eval_summary.csv"
+    }
+  },
+  "baseline": "reward_penalty",
+  "checkpoints": [
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/checkpoints/checkpoint_50000.zip",
+      "elapsed_seconds": 74.53090225000051,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 670.8626359068003,
+      "timesteps": 50000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/checkpoints/checkpoint_100000.zip",
+      "elapsed_seconds": 146.69088533399918,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 681.705608593357,
+      "timesteps": 100000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/checkpoints/checkpoint_150000.zip",
+      "elapsed_seconds": 218.79076104200067,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 685.5865336481056,
+      "timesteps": 150000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/checkpoints/checkpoint_200000.zip",
+      "elapsed_seconds": 290.5209127920007,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 688.4185975406378,
+      "timesteps": 200000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/checkpoints/checkpoint_250000.zip",
+      "elapsed_seconds": 362.47280624999985,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 689.706910420933,
+      "timesteps": 250000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "reward_penalty",
+      "checkpoint_path": "results/reward_penalty/easy/seed1_lambda3p0/final_model.zip",
+      "elapsed_seconds": 364.59156966699993,
+      "penalty_coeff": 3.0,
+      "run_seed": 1,
+      "steps_per_second": 690.9210750817317,
+      "timesteps": 251904,
+      "variant": "easy"
+    }
+  ],
+  "example_commands": {
+    "test": "python scripts/evaluate_baseline.py --run-dir results/reward_penalty/easy/seed1_lambda3p0 --checkpoint final_model.zip --split test",
+    "train": "python scripts/evaluate_baseline.py --run-dir results/reward_penalty/easy/seed1_lambda3p0 --checkpoint final_model.zip --split train"
+  },
+  "metrics": [
+    "episode_return",
+    "episode_cost",
+    "goals_achieved",
+    "episode_length"
+  ],
+  "run_dir": "results/reward_penalty/easy/seed1_lambda3p0",
+  "run_seed": 1,
+  "supported_splits": [
+    "train",
+    "test"
+  ],
+  "train_metrics_csv": "results/reward_penalty/easy/seed1_lambda3p0/train_metrics.csv",
+  "variant": "easy"
+}

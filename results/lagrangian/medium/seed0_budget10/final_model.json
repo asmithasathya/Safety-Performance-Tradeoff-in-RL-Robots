@@ -1,0 +1,14 @@
+{
+  "baseline": "lagrangian",
+  "budget": 10.0,
+  "checkpoint_path": "results/lagrangian/medium/seed0_budget10/final_model.zip",
+  "elapsed_seconds": 409.01746529199954,
+  "lagrangian_budget": 10.0,
+  "lagrangian_init_lambda": 0.0,
+  "lagrangian_lambda": 408.8499999999999,
+  "lagrangian_lr": 0.05,
+  "run_seed": 0,
+  "steps_per_second": 615.8758990871025,
+  "timesteps": 251904,
+  "variant": "medium"
+}

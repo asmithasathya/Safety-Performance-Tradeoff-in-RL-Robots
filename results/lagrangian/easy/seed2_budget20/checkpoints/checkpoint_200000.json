@@ -1,0 +1,14 @@
+{
+  "baseline": "lagrangian",
+  "budget": 20.0,
+  "checkpoint_path": "results/lagrangian/easy/seed2_budget20/checkpoints/checkpoint_200000.zip",
+  "elapsed_seconds": 364.06321829100125,
+  "lagrangian_budget": 20.0,
+  "lagrangian_init_lambda": 0.0,
+  "lagrangian_lambda": 3.5500000000000043,
+  "lagrangian_lr": 0.05,
+  "run_seed": 2,
+  "steps_per_second": 549.3551376072073,
+  "timesteps": 200000,
+  "variant": "easy"
+}

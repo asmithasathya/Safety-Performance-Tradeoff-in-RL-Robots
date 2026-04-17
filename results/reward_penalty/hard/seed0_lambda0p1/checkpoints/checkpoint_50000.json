@@ -1,0 +1,10 @@
+{
+  "baseline": "reward_penalty",
+  "checkpoint_path": "results/reward_penalty/hard/seed0_lambda0p1/checkpoints/checkpoint_50000.zip",
+  "elapsed_seconds": 82.31815108299998,
+  "penalty_coeff": 0.1,
+  "run_seed": 0,
+  "steps_per_second": 607.3994346723399,
+  "timesteps": 50000,
+  "variant": "hard"
+}

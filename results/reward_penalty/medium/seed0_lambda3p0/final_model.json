@@ -1,0 +1,10 @@
+{
+  "baseline": "reward_penalty",
+  "checkpoint_path": "results/reward_penalty/medium/seed0_lambda3p0/final_model.zip",
+  "elapsed_seconds": 384.34531716700076,
+  "penalty_coeff": 3.0,
+  "run_seed": 0,
+  "steps_per_second": 655.410611481797,
+  "timesteps": 251904,
+  "variant": "medium"
+}

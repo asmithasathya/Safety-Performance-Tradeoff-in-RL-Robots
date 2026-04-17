@@ -1,0 +1,126 @@
+{
+  "auto_evaluation": {
+    "checkpoint": "final_model.zip",
+    "episodes_per_seed": 1,
+    "render_mode": null,
+    "splits": [
+      "train",
+      "test"
+    ]
+  },
+  "auto_evaluation_outputs": {
+    "test": {
+      "eval_episodes_csv": "results/lagrangian/easy/seed1_budget35/evaluations/final_model/test/eval_episodes.csv",
+      "eval_summary_csv": "results/lagrangian/easy/seed1_budget35/evaluations/final_model/test/eval_summary.csv"
+    },
+    "train": {
+      "eval_episodes_csv": "results/lagrangian/easy/seed1_budget35/evaluations/final_model/train/eval_episodes.csv",
+      "eval_summary_csv": "results/lagrangian/easy/seed1_budget35/evaluations/final_model/train/eval_summary.csv"
+    }
+  },
+  "baseline": "lagrangian",
+  "checkpoints": [
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/checkpoints/checkpoint_50000.zip",
+      "elapsed_seconds": 73.99440187499931,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 40.0,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 675.726743651277,
+      "timesteps": 50000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/checkpoints/checkpoint_100000.zip",
+      "elapsed_seconds": 148.5584622919996,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 2.449999999999999,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 673.1356643862455,
+      "timesteps": 100000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/checkpoints/checkpoint_150000.zip",
+      "elapsed_seconds": 222.45455737500015,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 0.0,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 674.2950141111747,
+      "timesteps": 150000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/checkpoints/checkpoint_200000.zip",
+      "elapsed_seconds": 296.55578562499977,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 31.15,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 674.4093645345844,
+      "timesteps": 200000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/checkpoints/checkpoint_250000.zip",
+      "elapsed_seconds": 370.68671387500035,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 30.1,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 674.4239540074325,
+      "timesteps": 250000,
+      "variant": "easy"
+    },
+    {
+      "baseline": "lagrangian",
+      "budget": 35.0,
+      "checkpoint_path": "results/lagrangian/easy/seed1_budget35/final_model.zip",
+      "elapsed_seconds": 372.74570674999995,
+      "lagrangian_budget": 35.0,
+      "lagrangian_init_lambda": 0.0,
+      "lagrangian_lambda": 28.35,
+      "lagrangian_lr": 0.05,
+      "run_seed": 1,
+      "steps_per_second": 675.8065745038068,
+      "timesteps": 251904,
+      "variant": "easy"
+    }
+  ],
+  "example_commands": {
+    "test": "python scripts/evaluate_baseline.py --run-dir results/lagrangian/easy/seed1_budget35 --checkpoint final_model.zip --split test",
+    "train": "python scripts/evaluate_baseline.py --run-dir results/lagrangian/easy/seed1_budget35 --checkpoint final_model.zip --split train"
+  },
+  "metrics": [
+    "episode_return",
+    "episode_cost",
+    "goals_achieved",
+    "episode_length"
+  ],
+  "run_dir": "results/lagrangian/easy/seed1_budget35",
+  "run_seed": 1,
+  "supported_splits": [
+    "train",
+    "test"
+  ],
+  "train_metrics_csv": "results/lagrangian/easy/seed1_budget35/train_metrics.csv",
+  "variant": "easy"
+}

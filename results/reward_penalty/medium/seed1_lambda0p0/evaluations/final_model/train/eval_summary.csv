@@ -1,0 +1,2 @@
+baseline,variant,run_seed,split,checkpoint_name,checkpoint_timesteps,episodes,deterministic,penalty_coeff,budget,lagrangian_lambda,shield_warning_radius,mean_episode_return,std_episode_return,mean_episode_cost,std_episode_cost,mean_goals_achieved,std_goals_achieved,mean_episode_length,std_episode_length,mean_shield_intervention_rate,std_shield_intervention_rate
+reward_penalty,medium,1,train,final_model.zip,251904,32,True,0.0,,,,21.279881219661313,4.783170158722881,49.46875,35.96698518693915,8.34375,2.0556230047117103,1000.0,0.0,,

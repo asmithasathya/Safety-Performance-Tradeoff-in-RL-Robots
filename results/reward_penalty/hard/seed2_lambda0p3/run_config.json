@@ -1,0 +1,24 @@
+{
+  "baseline": "reward_penalty",
+  "budget": null,
+  "lagrangian_init_lambda": 0.0,
+  "lagrangian_lr": null,
+  "output_dir": "results/reward_penalty/hard/seed2_lambda0p3",
+  "penalty_coeff": 0.3,
+  "ppo_kwargs": {
+    "batch_size": 64,
+    "clip_range": 0.2,
+    "gae_lambda": 0.95,
+    "gamma": 0.99,
+    "learning_rate": 0.0003,
+    "n_steps": 2048,
+    "policy": "MlpPolicy",
+    "verbose": 0
+  },
+  "render_mode": null,
+  "save_freq": 50000,
+  "seed": 2,
+  "shield_warning_radius": null,
+  "total_timesteps": 250000,
+  "variant": "hard"
+}
