@@ -1,0 +1,6 @@
+variant,split,run_seed,target_budget,matched_penalty_coeff,matched_mean_episode_cost,matched_mean_episode_return,matched_checkpoint_name,cost_gap,summary_path
+medium,test,0,0.0,1.0,9.125,-1.057112029249001,final_model.zip,9.125,results/reward_penalty/medium/seed0_lambda1p0/evaluations/final_model/test/eval_summary.csv
+medium,test,0,5.0,1.0,9.125,-1.057112029249001,final_model.zip,4.125,results/reward_penalty/medium/seed0_lambda1p0/evaluations/final_model/test/eval_summary.csv
+medium,test,0,10.0,1.0,9.125,-1.057112029249001,final_model.zip,0.875,results/reward_penalty/medium/seed0_lambda1p0/evaluations/final_model/test/eval_summary.csv
+medium,test,0,20.0,1.0,9.125,-1.057112029249001,final_model.zip,10.875,results/reward_penalty/medium/seed0_lambda1p0/evaluations/final_model/test/eval_summary.csv
+medium,test,0,35.0,1.0,9.125,-1.057112029249001,final_model.zip,25.875,results/reward_penalty/medium/seed0_lambda1p0/evaluations/final_model/test/eval_summary.csv

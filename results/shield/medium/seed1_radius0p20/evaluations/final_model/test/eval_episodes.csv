@@ -1,0 +1,9 @@
+baseline,variant,run_seed,split,layout_seed,checkpoint_name,checkpoint_timesteps,episode_index,episode_return,episode_cost,goals_achieved,episode_length,penalty_coeff,budget,lagrangian_lambda,shield_warning_radius,episode_shield_interventions,shield_intervention_rate
+shield,medium,1,test,100,final_model.zip,251904,0,-18.174687916400934,0.0,2,1000,,,,0.2,0,0.0
+shield,medium,1,test,101,final_model.zip,251904,0,21.44341614290921,85.0,10,1000,,,,0.2,85,0.085
+shield,medium,1,test,102,final_model.zip,251904,0,14.61214768876089,168.0,5,1000,,,,0.2,167,0.167
+shield,medium,1,test,103,final_model.zip,251904,0,14.941382431535269,167.0,5,1000,,,,0.2,166,0.166
+shield,medium,1,test,104,final_model.zip,251904,0,17.698532494526923,154.0,6,1000,,,,0.2,154,0.154
+shield,medium,1,test,105,final_model.zip,251904,0,-11.95629187452198,77.0,2,1000,,,,0.2,77,0.077
+shield,medium,1,test,106,final_model.zip,251904,0,21.343621110485504,33.0,9,1000,,,,0.2,33,0.033
+shield,medium,1,test,107,final_model.zip,251904,0,16.170391700534687,84.0,6,1000,,,,0.2,84,0.084
