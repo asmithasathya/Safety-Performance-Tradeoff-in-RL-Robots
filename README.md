@@ -355,6 +355,59 @@ This writes:
 
 Use train-split aggregation to match reward-penalty coefficient sweeps to target budgets `{0, 5, 10, 20, 35}`. After that, run the corresponding held-out test evaluations for robustness reporting.
 
+### Reward-Penalty Plots
+
+Generate the main reward-penalty result figures with:
+
+```bash
+python scripts/plot_reward_penalty_results.py \
+  --results-root results \
+  --output-dir results/figures/reward_penalty
+```
+
+If Matplotlib is missing, install the analysis extra with `pip install -e ".[analysis]"`.
+
+This verifies `eval_summary.csv` against `eval_episodes.csv`, matches fixed-penalty runs to target budgets on the train split, derives success as `goals_achieved > 0`, and writes:
+
+- `reward_penalty_test_task_return_by_budget.png`
+- `reward_penalty_test_success_rate_by_budget.png`
+- `reward_penalty_train_lambda_matching_by_budget.png`
+- `reward_penalty_test_mistakes_by_lambda.png`
+
+### Lagrangian Plots
+
+Generate the main Lagrangian result figures with:
+
+```bash
+python scripts/plot_lagrangian_results.py \
+  --results-root results \
+  --output-dir results/figures/lagrangian
+```
+
+This verifies `eval_summary.csv` against `eval_episodes.csv`, derives success as `goals_achieved > 0`, and writes:
+
+- `lagrangian_test_task_return_by_budget.png`
+- `lagrangian_test_success_rate_by_budget.png`
+- `lagrangian_test_constraint_violations_by_budget.png`
+- `lagrangian_learned_lambda_by_budget.png`
+
+### Medium Comparison Plots
+
+Compare reward-penalty and Lagrangian on the medium task with:
+
+```bash
+python scripts/plot_medium_comparison.py \
+  --results-root results \
+  --output-dir results/figures/medium_comparison \
+  --variant medium
+```
+
+This writes:
+
+- `medium_reward_penalty_vs_lagrangian_budget_task_return.png`
+- `medium_reward_penalty_vs_lagrangian_learning_speed.png`
+- `medium_reward_penalty_vs_lagrangian_robustness.png`
+
 ## Repo Layout
 
 - `src/spt_envs/`: environment definitions, wrappers, and factories

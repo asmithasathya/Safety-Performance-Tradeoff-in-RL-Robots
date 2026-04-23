@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+analysis = ["matplotlib>=3.7"]
 train = [
   "stable-baselines3>=2.3,<3.0",
   "torch>=2.2",
