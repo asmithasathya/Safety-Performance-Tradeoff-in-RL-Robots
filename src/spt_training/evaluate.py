@@ -70,6 +70,11 @@ def build_evaluate_parser():
     parser.add_argument("--episodes-per-seed", type=int, default=1)
     parser.add_argument("--render", dest="render_mode", choices=("human",), default=None)
     parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Run evaluation/rendering without writing eval_episodes.csv or eval_summary.csv.",
+    )
+    parser.add_argument(
         "--stochastic",
         action="store_true",
         help="Sample actions stochastically instead of deterministic PPO inference.",
@@ -108,6 +113,7 @@ def evaluate_run(
     deterministic=True,
     show_progress=True,
     render_mode=None,
+    no_save=False,
 ):
     """Evaluate one checkpoint across every layout seed for a chosen split."""
     try:
@@ -130,7 +136,8 @@ def evaluate_run(
 
     if output_dir is None:
         output_dir = run_dir / "evaluations" / checkpoint_path.stem / split
-    output_dir = ensure_directory(output_dir)
+    if not no_save:
+        output_dir = ensure_directory(output_dir)
 
     if show_progress:
         print(
@@ -226,8 +233,10 @@ def evaluate_run(
                     )
                 )
 
-    eval_episodes_path = output_dir / "eval_episodes.csv"
-    _write_csv(eval_episodes_path, EVAL_EPISODE_FIELDNAMES, rows)
+    eval_episodes_path = None
+    if not no_save:
+        eval_episodes_path = output_dir / "eval_episodes.csv"
+        _write_csv(eval_episodes_path, EVAL_EPISODE_FIELDNAMES, rows)
 
     returns = np.array([row["episode_return"] for row in rows], dtype=float)
     costs = np.array([row["episode_cost"] for row in rows], dtype=float)
@@ -262,18 +271,20 @@ def evaluate_run(
         "std_shield_intervention_rate": float(shield_rates.std(ddof=0)) if len(shield_rates) else None,
     }
 
-    eval_summary_path = output_dir / "eval_summary.csv"
-    _write_csv(eval_summary_path, EVAL_SUMMARY_FIELDNAMES, [summary_row])
+    eval_summary_path = None
+    if not no_save:
+        eval_summary_path = output_dir / "eval_summary.csv"
+        _write_csv(eval_summary_path, EVAL_SUMMARY_FIELDNAMES, [summary_row])
     if show_progress:
         print(
             "[eval] finished split={} mean_return={:.3f} mean_cost={:.3f} outputs={}".format(
                 split,
                 float(summary_row["mean_episode_return"]),
                 float(summary_row["mean_episode_cost"]),
-                output_dir,
+                "not_saved" if no_save else output_dir,
             )
         )
     return {
-        "eval_episodes_csv": str(eval_episodes_path),
-        "eval_summary_csv": str(eval_summary_path),
+        "eval_episodes_csv": None if eval_episodes_path is None else str(eval_episodes_path),
+        "eval_summary_csv": None if eval_summary_path is None else str(eval_summary_path),
     }
